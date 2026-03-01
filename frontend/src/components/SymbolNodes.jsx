@@ -1,13 +1,80 @@
 import { Handle, Position } from 'reactflow';
 
-function NodeShell({ className, data, children }) {
+function getRatingItems(type, data) {
+  if (!data) return [];
+
+  if (type === 'bus') {
+    return [{ label: 'Vn', value: `${Number(data.vn_kv || 0).toFixed(1)} kV` }];
+  }
+
+  if (type === 'load') {
+    return [
+      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
+      { label: 'Q', value: `${Number(data.q_mvar || 0).toFixed(2)} MVAr` }
+    ];
+  }
+
+  if (type === 'resistive_load') {
+    return [
+      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
+      { label: 'Q', value: `${Number(data.q_mvar || 0).toFixed(2)} MVAr` }
+    ];
+  }
+
+  if (type === 'generator') {
+    return [
+      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
+      { label: 'V', value: `${Number(data.vm_pu || 0).toFixed(2)} pu` }
+    ];
+  }
+
+  if (type === 'utility') {
+    return [
+      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
+      { label: 'V', value: `${Number(data.vm_pu || 0).toFixed(2)} pu` }
+    ];
+  }
+
+  if (type === 'transformer') {
+    return [
+      { label: 'HV', value: `${Number(data.hv_kv || 0).toFixed(1)} kV` },
+      { label: 'LV', value: `${Number(data.lv_kv || 0).toFixed(1)} kV` }
+    ];
+  }
+
+  return [];
+}
+
+function NodeShell({
+  className,
+  data,
+  children,
+  showRating = false,
+  ratingItems = [],
+  allowTopTarget = true,
+  allowBottomSource = true
+}) {
   const hasFaultResult = Boolean(data?.faultCurrentKa != null && data?.faultVoltageKv != null);
+  const hasRatings = showRating && ratingItems.length > 0;
 
   return (
     <div className={`symbol-node ${className}`}>
-      <Handle type="target" position={Position.Top} className="symbol-handle" />
-      <Handle type="source" position={Position.Bottom} className="symbol-handle" />
-      <div className="symbol-icon">{children}</div>
+      <div className="symbol-anchor">
+        {allowTopTarget && <Handle type="target" position={Position.Top} className="symbol-handle" />}
+        {allowBottomSource && (
+          <Handle type="source" position={Position.Bottom} className="symbol-handle" />
+        )}
+        <div className="symbol-icon">{children}</div>
+        {hasRatings && (
+          <div className="symbol-ratings">
+            {ratingItems.map((item) => (
+              <div className="symbol-rating" key={`${item.label}-${item.value}`}>
+                <span>{item.label}:</span> <span>{item.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="symbol-label">{data.label}</div>
       {hasFaultResult && (
         <div className="fault-metrics">
@@ -60,9 +127,15 @@ export function BusNode({ data }) {
   );
 }
 
-export function LoadNode({ data }) {
+export function LoadNode({ data, showRating = false }) {
   return (
-    <NodeShell className="symbol-node--load" data={data}>
+    <NodeShell
+      className="symbol-node--load"
+      data={data}
+      showRating={showRating}
+      ratingItems={getRatingItems('load', data)}
+      allowBottomSource={false}
+    >
       <svg viewBox="0 0 80 44" aria-label="motor symbol">
         <circle cx="40" cy="22" r="16" fill="none" stroke="currentColor" strokeWidth="3" />
         <path
@@ -78,9 +151,15 @@ export function LoadNode({ data }) {
   );
 }
 
-export function GeneratorNode({ data }) {
+export function GeneratorNode({ data, showRating = false }) {
   return (
-    <NodeShell className="symbol-node--generator" data={data}>
+    <NodeShell
+      className="symbol-node--generator"
+      data={data}
+      showRating={showRating}
+      ratingItems={getRatingItems('generator', data)}
+      allowTopTarget={false}
+    >
       <svg viewBox="0 0 80 44" aria-label="generator symbol">
         <circle cx="40" cy="22" r="16" fill="none" stroke="currentColor" strokeWidth="3" />
         <path
@@ -90,6 +169,70 @@ export function GeneratorNode({ data }) {
           strokeWidth="2.5"
           strokeLinecap="round"
         />
+      </svg>
+    </NodeShell>
+  );
+}
+
+export function UtilityNode({ data, showRating = false }) {
+  return (
+    <NodeShell
+      className="symbol-node--utility"
+      data={data}
+      showRating={showRating}
+      ratingItems={getRatingItems('utility', data)}
+      allowTopTarget={false}
+    >
+      <svg viewBox="0 0 80 44" aria-label="utility grid symbol">
+        <path
+          d="M22 10h36L40 36z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.7"
+          strokeLinejoin="round"
+        />
+        <path d="M30 33h20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      </svg>
+    </NodeShell>
+  );
+}
+
+export function ResistiveLoadNode({ data, showRating = false }) {
+  return (
+    <NodeShell
+      className="symbol-node--resistive-load"
+      data={data}
+      showRating={showRating}
+      ratingItems={getRatingItems('resistive_load', data)}
+      allowBottomSource={false}
+    >
+      <svg viewBox="0 0 80 44" aria-label="resistive load symbol">
+        <rect x="24" y="8" width="32" height="28" fill="none" stroke="currentColor" strokeWidth="2.4" />
+        <path
+          d="M40 12v20M28 22h24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
+      </svg>
+    </NodeShell>
+  );
+}
+
+export function TransformerNode({ data, showRating = false }) {
+  return (
+    <NodeShell
+      className="symbol-node--transformer"
+      data={data}
+      showRating={showRating}
+      ratingItems={getRatingItems('transformer', data)}
+    >
+      <svg viewBox="0 0 80 44" aria-label="transformer symbol">
+        <path d="M40 3v9" fill="none" stroke="currentColor" strokeWidth="2.3" />
+        <path d="M40 32v9" fill="none" stroke="currentColor" strokeWidth="2.3" />
+        <circle cx="40" cy="15.5" r="7.5" fill="none" stroke="currentColor" strokeWidth="2.4" />
+        <circle cx="40" cy="28.5" r="7.5" fill="none" stroke="currentColor" strokeWidth="2.4" />
       </svg>
     </NodeShell>
   );

@@ -55,7 +55,7 @@ class ShortCircuitInput(NetworkInput):
     fault_type: Literal['three_phase', 'single_phase', 'earth_fault'] = 'three_phase'
 
 
-app = FastAPI(title='Open Power Studio API', version='0.1.0')
+app = FastAPI(title='OpenPower Studio API', version='0.1.0')
 
 app.add_middleware(
     CORSMiddleware,
