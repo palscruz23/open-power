@@ -4,18 +4,66 @@ export default function ControlPanel({
   onLoadTemplate,
   selectedNode,
   onUpdateNode,
+  onCopySelected,
+  onDeleteSelected,
+  selectedNodesCount,
+  selectedEdgesCount,
   result,
   error,
-  busCount
+  busCount,
+  busNodes,
+  shortCircuitFaultType,
+  onShortCircuitFaultTypeChange,
+  shortCircuitFaultBusId,
+  onShortCircuitFaultBusIdChange
 }) {
+  const selectedCount = selectedNodesCount + selectedEdgesCount;
+
   return (
     <section className="controls">
       <h3>Study Controls</h3>
       <p>Buses: {busCount}/20</p>
+      <p>Selected: {selectedNodesCount} nodes, {selectedEdgesCount} connectors</p>
       <div className="buttons">
         <button onClick={onLoadTemplate}>Load Demo Network</button>
         <button onClick={onRunLoadFlow}>Run Load Flow</button>
         <button onClick={onRunShortCircuit}>Run Short Circuit</button>
+        <button onClick={onCopySelected} disabled={selectedCount === 0}>
+          Copy Selected
+        </button>
+        <button onClick={onDeleteSelected} disabled={selectedCount === 0}>
+          Delete Selected
+        </button>
+      </div>
+
+      <div className="editor">
+        <h4>Short Circuit Setup</h4>
+        <label>
+          Fault Type
+          <select
+            value={shortCircuitFaultType}
+            onChange={(e) => onShortCircuitFaultTypeChange(e.target.value)}
+          >
+            <option value="three_phase">Three Phase</option>
+            <option value="single_phase">Single Phase</option>
+            <option value="earth_fault">Earth Fault</option>
+          </select>
+        </label>
+        <label>
+          Faulted Bus
+          <select
+            value={shortCircuitFaultBusId}
+            onChange={(e) => onShortCircuitFaultBusIdChange(e.target.value)}
+            disabled={busNodes.length === 0}
+          >
+            {busNodes.length === 0 && <option value="">No buses available</option>}
+            {busNodes.map((busNode) => (
+              <option key={busNode.id} value={busNode.id}>
+                {busNode.data.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {selectedNode && (
@@ -44,14 +92,14 @@ export default function ControlPanel({
           {selectedNode.type === 'load' && (
             <>
               <label>
-                Name
+                Motor Name
                 <input
                   value={selectedNode.data.label}
                   onChange={(e) => onUpdateNode('label', e.target.value)}
                 />
               </label>
               <label>
-                P (MW)
+                Motor P (MW)
                 <input
                   type="number"
                   step="0.1"
@@ -60,7 +108,7 @@ export default function ControlPanel({
                 />
               </label>
               <label>
-                Q (MVAr)
+                Motor Q (MVAr)
                 <input
                   type="number"
                   step="0.1"

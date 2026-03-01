@@ -1,6 +1,6 @@
 const items = [
   { type: 'bus', label: 'Bus' },
-  { type: 'load', label: 'Load' },
+  { type: 'load', label: 'Motor' },
   { type: 'generator', label: 'Generator' }
 ];
 

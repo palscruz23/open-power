@@ -1,3 +1,4 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-pandapower==2.14.10
+# pandapower 3.4.0 supports Python 3.13 (PyPI classifiers include 3.13).
+pandapower==3.4.0

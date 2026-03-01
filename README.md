@@ -19,6 +19,18 @@ The stack is intentionally simple for low cost and easy local operation:
 
 ### 1) Backend
 
+<<<<<<< ours
+<<<<<<< ours
+=======
+> **Python version:** use **Python 3.12** for now.
+> `pandapower==2.14.10` depends on `scipy<1.14`, and SciPy wheels for Python 3.13 on Windows are not available for that range.
+
+>>>>>>> theirs
+=======
+> **Python version:** use **Python 3.12** for now.
+> `pandapower==2.14.10` depends on `scipy<1.14`, and SciPy wheels for Python 3.13 on Windows are not available for that range.
+
+>>>>>>> theirs
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -26,6 +38,24 @@ pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+<<<<<<< ours
+<<<<<<< ours
+=======
+=======
+>>>>>>> theirs
+Windows (PowerShell) example with Python 3.12:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 ### 2) Frontend
 
 In another terminal:

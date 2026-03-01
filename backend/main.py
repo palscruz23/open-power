@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +50,11 @@ class NetworkInput(BaseModel):
     generators: List[Generator] = []
 
 
+class ShortCircuitInput(NetworkInput):
+    fault_bus_id: str
+    fault_type: Literal['three_phase', 'single_phase', 'earth_fault'] = 'three_phase'
+
+
 app = FastAPI(title='Open Power Studio API', version='0.1.0')
 
 app.add_middleware(
@@ -64,7 +69,11 @@ def ensure_engine_available() -> None:
     if pp is None:
         raise HTTPException(
             status_code=503,
-            detail='pandapower is not installed. Please `pip install -r backend/requirements.txt`.'
+            detail=(
+                'pandapower is not installed. '
+                'Install with `pip install -r backend/requirements.txt` and use Python 3.12 on Windows '
+                'for this pinned dependency set.'
+            )
         )
 
 
@@ -94,7 +103,10 @@ def build_network(payload: NetworkInput):
             x_ohm_per_km=line.x_ohm_per_km,
             c_nf_per_km=line.c_nf_per_km,
             max_i_ka=line.max_i_ka,
-            name=line.id
+            name=line.id,
+            r0_ohm_per_km=line.r_ohm_per_km,
+            x0_ohm_per_km=line.x_ohm_per_km,
+            c0_nf_per_km=line.c_nf_per_km
         )
 
     for load in payload.loads:
@@ -107,7 +119,20 @@ def build_network(payload: NetworkInput):
         if generator.bus not in bus_map:
             raise HTTPException(status_code=400, detail=f'Invalid generator bus reference: {generator.id}')
         if not slack_assigned:
-            pp.create_ext_grid(net, bus=bus_map[generator.bus], vm_pu=generator.vm_pu, name=generator.id)
+            pp.create_ext_grid(
+                net,
+                bus=bus_map[generator.bus],
+                vm_pu=generator.vm_pu,
+                name=generator.id,
+                s_sc_max_mva=1000.0,
+                s_sc_min_mva=500.0,
+                rx_max=0.1,
+                rx_min=0.1,
+                x0x_max=1.0,
+                x0x_min=1.0,
+                r0x0_max=0.1,
+                r0x0_min=0.1
+            )
             slack_assigned = True
         else:
             pp.create_gen(
@@ -119,9 +144,22 @@ def build_network(payload: NetworkInput):
             )
 
     if not slack_assigned:
-        pp.create_ext_grid(net, bus=bus_map[payload.buses[0].id], vm_pu=1.0, name='auto-slack')
+        pp.create_ext_grid(
+            net,
+            bus=bus_map[payload.buses[0].id],
+            vm_pu=1.0,
+            name='auto-slack',
+            s_sc_max_mva=1000.0,
+            s_sc_min_mva=500.0,
+            rx_max=0.1,
+            rx_min=0.1,
+            x0x_max=1.0,
+            x0x_min=1.0,
+            r0x0_max=0.1,
+            r0x0_min=0.1
+        )
 
-    return net
+    return net, bus_map
 
 
 @app.get('/health')
@@ -131,7 +169,7 @@ def health() -> Dict[str, str]:
 
 @app.post('/api/calculate/load-flow')
 def calculate_load_flow(payload: NetworkInput):
-    net = build_network(payload)
+    net, _ = build_network(payload)
 
     try:
         pp.runpp(net)
@@ -149,18 +187,42 @@ def calculate_load_flow(payload: NetworkInput):
 
 
 @app.post('/api/calculate/short-circuit')
-def calculate_short_circuit(payload: NetworkInput):
+def calculate_short_circuit(payload: ShortCircuitInput):
     if sc is None:
         raise HTTPException(status_code=503, detail='pandapower short-circuit module unavailable.')
 
-    net = build_network(payload)
+    net, bus_map = build_network(payload)
+
+    if payload.fault_bus_id not in bus_map:
+        raise HTTPException(status_code=400, detail=f'Invalid fault bus reference: {payload.fault_bus_id}')
+
+    fault_map = {
+        'three_phase': '3ph',
+        'single_phase': '2ph',
+        'earth_fault': '1ph'
+    }
+    fault_code = fault_map[payload.fault_type]
+    fault_bus_idx = bus_map[payload.fault_bus_id]
 
     try:
-        sc.calc_sc(net, case='max')
+        sc.calc_sc(net, case='max', bus=fault_bus_idx, fault=fault_code)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f'Short circuit failed: {exc}') from exc
 
+    if fault_bus_idx not in net.res_bus_sc.index:
+        raise HTTPException(status_code=400, detail='Short circuit results not available for selected fault bus.')
+
+    bus_result = net.res_bus_sc.loc[fault_bus_idx]
+
     return {
+        'fault': {
+            'bus_id': payload.fault_bus_id,
+            'fault_type': payload.fault_type
+        },
+        'fault_bus': {
+            'current_ka': round(float(bus_result['ikss_ka']), 5),
+            'voltage_level_kv': round(float(net.bus.loc[fault_bus_idx, 'vn_kv']), 5)
+        },
         'buses': net.res_bus_sc[['ikss_ka', 'skss_mw']].round(5).to_dict('index')
         if len(net.res_bus_sc) > 0
         else {}
