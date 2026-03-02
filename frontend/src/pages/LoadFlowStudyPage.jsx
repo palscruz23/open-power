@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
-  Background,
   ConnectionLineType,
   Controls,
   MiniMap,
@@ -76,11 +75,54 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
     const isSelectedBusValid = busNodes.some((bus) => bus.id === shortCircuitFaultBusId);
     if (!isSelectedBusValid) {
-      setShortCircuitFaultBusId(busNodes[0].id);
+      setShortCircuitFaultBusId('');
     }
   }, [busNodes, shortCircuitFaultBusId]);
 
-  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      let changed = false;
+      const nextNodes = currentNodes.map((node) => {
+        if (node.type !== 'bus') return node;
+        const isFaultSelected =
+          studyType === 'shortcircuit' &&
+          Boolean(shortCircuitFaultBusId) &&
+          node.id === shortCircuitFaultBusId;
+        if (Boolean(node.data?.isFaultSelected) === isFaultSelected) return node;
+        changed = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isFaultSelected
+          }
+        };
+      });
+      return changed ? nextNodes : currentNodes;
+    });
+  }, [setNodes, shortCircuitFaultBusId, studyType]);
+
+  const onConnect = useCallback(
+    (params) => {
+      const sourceNode = nodes.find((node) => node.id === params.source);
+      const targetNode = nodes.find((node) => node.id === params.target);
+
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            sourceHandle:
+              params.sourceHandle ?? (sourceNode?.type === 'bus' ? 'bottom-3' : undefined),
+            targetHandle: params.targetHandle ?? (targetNode?.type === 'bus' ? 'top-3' : undefined),
+            type: 'straight',
+            style: { stroke: '#b8bec7', strokeWidth: 3 }
+          },
+          eds
+        )
+      );
+    },
+    [setEdges, nodes]
+  );
   const onReconnect = useCallback(
     (oldEdge, newConnection) =>
       setEdges((currentEdges) => reconnectEdge(oldEdge, newConnection, currentEdges)),
@@ -451,48 +493,95 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   }, []);
 
   const onLoadTemplate = useCallback(() => {
+    const busX = 320;
+    const busCenterX = busX + 110;
+    const symbolWidth = 92;
+    const symbolX = (centerX) => centerX - symbolWidth / 2;
+
     const templateNodes = [
-      { id: 'bus-1', type: 'bus', position: { x: 320, y: 120 }, data: { label: 'Bus 1', vn_kv: 33 } },
-      { id: 'bus-2', type: 'bus', position: { x: 320, y: 320 }, data: { label: 'Bus 2', vn_kv: 11 } },
+      { id: 'bus-1', type: 'bus', position: { x: busX, y: 150 }, data: { label: 'Bus 1', vn_kv: 33 } },
+      { id: 'bus-2', type: 'bus', position: { x: busX, y: 365 }, data: { label: 'Bus 2', vn_kv: 11 } },
       {
         id: 'load-1',
         type: 'load',
-        position: { x: 460, y: 470 },
+        position: { x: symbolX(busX + 18), y: 530 },
         data: { label: 'Motor A', p_mw: 4, q_mvar: 1.5 }
       },
       {
         id: 'load-2',
         type: 'load',
-        position: { x: 320, y: 470 },
+        position: { x: symbolX(busCenterX), y: 530 },
         data: { label: 'Motor B', p_mw: 3.2, q_mvar: 1.1 }
       },
       {
         id: 'resistive-load-1',
         type: 'resistive_load',
-        position: { x: 600, y: 470 },
+        position: { x: symbolX(busX + 202), y: 530 },
         data: { label: 'Resistive A', p_mw: 1.2, q_mvar: 0 }
       },
       {
         id: 'utility-1',
         type: 'utility',
-        position: { x: 320, y: 20 },
+        position: { x: symbolX(busCenterX), y: 20 },
         data: { label: 'Utility', p_mw: 0, vm_pu: 1.0 }
       },
       {
         id: 'transformer-1',
         type: 'transformer',
-        position: { x: 320, y: 220 },
+        position: { x: symbolX(busCenterX), y: 245 },
         data: { label: 'TX 1', hv_kv: 33, lv_kv: 11 }
       }
     ];
 
     const templateEdges = [
-      { id: 'e-util-b1', source: 'utility-1', target: 'bus-1' },
-      { id: 'e-b1-tx', source: 'bus-1', target: 'transformer-1' },
-      { id: 'e-tx-b2', source: 'transformer-1', target: 'bus-2' },
-      { id: 'e-b2-load1', source: 'bus-2', target: 'load-1' },
-      { id: 'e-b2-load2', source: 'bus-2', target: 'load-2' },
-      { id: 'e-b2-rload1', source: 'bus-2', target: 'resistive-load-1' }
+      {
+        id: 'e-util-b1',
+        source: 'utility-1',
+        target: 'bus-1',
+        targetHandle: 'top-3',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      },
+      {
+        id: 'e-b1-tx',
+        source: 'bus-1',
+        target: 'transformer-1',
+        sourceHandle: 'bottom-3',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      },
+      {
+        id: 'e-tx-b2',
+        source: 'transformer-1',
+        target: 'bus-2',
+        targetHandle: 'top-3',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      },
+      {
+        id: 'e-b2-load1',
+        source: 'bus-2',
+        target: 'load-1',
+        sourceHandle: 'bottom-0',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      },
+      {
+        id: 'e-b2-load2',
+        source: 'bus-2',
+        target: 'load-2',
+        sourceHandle: 'bottom-3',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      },
+      {
+        id: 'e-b2-rload1',
+        source: 'bus-2',
+        target: 'resistive-load-1',
+        sourceHandle: 'bottom-6',
+        type: 'straight',
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      }
     ];
 
     let centeredTemplateNodes = templateNodes;
@@ -725,12 +814,17 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             Show ratings
           </label>
         </div>
+        <div className="canvas-demo-action">
+          <button type="button" onClick={onLoadTemplate}>
+            Load Demo Network
+          </button>
+        </div>
         <ReactFlow
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          defaultEdgeOptions={{ type: 'smoothstep' }}
-          connectionLineType={ConnectionLineType.SmoothStep}
+          defaultEdgeOptions={{ type: 'straight', style: { stroke: '#b8bec7', strokeWidth: 3 } }}
+          connectionLineType={ConnectionLineType.Straight}
           edgesUpdatable
           reconnectRadius={20}
           selectionOnDrag
@@ -750,7 +844,6 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         >
           <MiniMap />
           <Controls />
-          <Background />
         </ReactFlow>
         {contextMenu && (
           <div className="node-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
@@ -788,7 +881,6 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         studyType={studyType}
         onRunLoadFlow={() => callStudy('loadflow')}
         onRunShortCircuit={() => callStudy('shortcircuit')}
-        onLoadTemplate={onLoadTemplate}
         selectedNode={selectedNode}
         onUpdateNode={onUpdateNode}
         selectedNodesCount={selectedNodes.length}

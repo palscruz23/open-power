@@ -2,7 +2,6 @@ export default function ControlPanel({
   studyType,
   onRunLoadFlow,
   onRunShortCircuit,
-  onLoadTemplate,
   selectedNode,
   onUpdateNode,
   selectedNodesCount,
@@ -21,10 +20,10 @@ export default function ControlPanel({
   const isProtection = studyType === 'protection';
 
   const panelTitle = isLoadFlow
-    ? 'Load Flow Controls'
+    ? 'Load Flow Settings'
     : isShortCircuit
-      ? 'Short Circuit Controls'
-      : 'Protection Coordination Controls';
+      ? 'Short Circuit Settings'
+      : 'Protection Coordination Settings';
 
   return (
     <section className="controls">
@@ -32,7 +31,6 @@ export default function ControlPanel({
       <p>Buses: {busCount}/20</p>
       <p>Selected: {selectedNodesCount} nodes, {selectedEdgesCount} connectors</p>
       <div className="buttons">
-        <button onClick={onLoadTemplate}>Load Demo Network</button>
         {isLoadFlow && <button onClick={onRunLoadFlow}>Run Load Flow</button>}
         {isShortCircuit && <button onClick={onRunShortCircuit}>Run Short Circuit</button>}
         {isProtection && <button disabled>Run Protection Check (Soon)</button>}
@@ -59,7 +57,9 @@ export default function ControlPanel({
               onChange={(e) => onShortCircuitFaultBusIdChange(e.target.value)}
               disabled={busNodes.length === 0}
             >
-              {busNodes.length === 0 && <option value="">No buses available</option>}
+              <option value="">
+                {busNodes.length === 0 ? 'No buses available' : 'Select a bus'}
+              </option>
               {busNodes.map((busNode) => (
                 <option key={busNode.id} value={busNode.id}>
                   {busNode.data.label}
@@ -192,6 +192,15 @@ export default function ControlPanel({
                 <input
                   value={selectedNode.data.label}
                   onChange={(e) => onUpdateNode('label', e.target.value)}
+                />
+              </label>
+              <label>
+                P (MW)
+                <input
+                  type="number"
+                  step="0.1"
+                  value={selectedNode.data.p_mw}
+                  onChange={(e) => onUpdateNode('p_mw', Number(e.target.value))}
                 />
               </label>
               <label>

@@ -64,6 +64,8 @@ function NodeShell({
         {allowBottomSource && (
           <Handle type="source" position={Position.Bottom} className="symbol-handle" />
         )}
+        {allowTopTarget && <div className="symbol-connector symbol-connector--top" />}
+        {allowBottomSource && <div className="symbol-connector symbol-connector--bottom" />}
         <div className="symbol-icon">{children}</div>
         {hasRatings && (
           <div className="symbol-ratings">
@@ -87,11 +89,12 @@ function NodeShell({
 }
 
 export function BusNode({ data }) {
-  const handleOffsets = [10, 24, 38, 52, 66, 80, 94];
+  const handleOffsets = [8, 22, 36, 50, 64, 78, 92];
   const hasFaultResult = data?.faultCurrentKa != null && data?.faultVoltageKv != null;
+  const isFaultHighlighted = Boolean(data?.isFaulted || data?.isFaultSelected);
 
   return (
-    <div className={`bus-node ${data.isFaulted ? 'symbol-node--faulted' : ''}`}>
+    <div className={`bus-node ${isFaultHighlighted ? 'symbol-node--faulted' : ''}`}>
       {handleOffsets.map((left, index) => (
         <Handle
           key={`t-${left}`}

@@ -11,7 +11,12 @@ const studyTabs = [
 function TopNavigation() {
   return (
     <header className="top-nav">
-      <div className="top-nav__brand">OpenPower Studio</div>
+      <div className="top-nav__brand">
+        <span className="top-nav__brand-icon" aria-hidden="true">
+          <img src="/favicon.svg" alt="" />
+        </span>
+        <span>OpenPower Studio</span>
+      </div>
       <nav className="top-nav__tabs" aria-label="Power system studies">
         {studyTabs.map((tab) => (
           <NavLink

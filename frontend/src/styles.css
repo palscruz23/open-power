@@ -46,11 +46,27 @@ body {
 }
 
 .top-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   justify-self: start;
   font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   color: #0f172a;
+}
+
+.top-nav__brand-icon {
+  width: 1.45rem;
+  height: 1.45rem;
+  display: inline-grid;
+  place-items: center;
+}
+
+.top-nav__brand-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .top-nav__tabs {
@@ -181,7 +197,7 @@ body {
 }
 
 .canvas {
-  background-color: #f6f7f9;
+  background-color: #f1f2f4;
   background-image:
     linear-gradient(to right, rgba(127, 139, 156, 0.18) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(127, 139, 156, 0.18) 1px, transparent 1px),
@@ -205,6 +221,21 @@ body {
   border: 1px solid #d4dde9;
   border-radius: 6px;
   padding: 0.35rem 0.55rem;
+  box-shadow: 0 4px 12px rgba(20, 32, 48, 0.1);
+}
+
+.canvas-demo-action {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 12;
+}
+
+.canvas-demo-action button {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f3f8a;
+  border: 1px solid #d4dde9;
+  border-radius: 6px;
   box-shadow: 0 4px 12px rgba(20, 32, 48, 0.1);
 }
 
@@ -286,6 +317,26 @@ body {
   z-index: 4;
 }
 
+.symbol-connector {
+  position: absolute;
+  left: 50%;
+  width: 2.2px;
+  transform: translateX(-50%);
+  background: currentColor;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.symbol-connector--top {
+  top: -5px;
+  height: 13px;
+}
+
+.symbol-connector--bottom {
+  bottom: -5px;
+  height: 13px;
+}
+
 .symbol-node .react-flow__handle-top {
   top: -4px;
 }
@@ -332,10 +383,10 @@ body {
 }
 
 .bus-rail {
-  height: 6px;
+  height: 8px;
   border-radius: 4px;
   background: #0d6f33;
-  border: 1px solid #0a4f24;
+  border: none;
 }
 
 .bus-meta {
