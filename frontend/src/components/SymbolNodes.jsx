@@ -10,15 +10,13 @@ function getRatingItems(type, data) {
   if (type === 'load') {
     return [
       { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
-      { label: 'Q', value: `${Number(data.q_mvar || 0).toFixed(2)} MVAr` }
+      { label: 'kV', value: `${Number(data.kv || 0).toFixed(2)} kV` },
+      { label: 'pf', value: `${Number(data.pf || 0).toFixed(2)}` }
     ];
   }
 
   if (type === 'resistive_load') {
-    return [
-      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
-      { label: 'Q', value: `${Number(data.q_mvar || 0).toFixed(2)} MVAr` }
-    ];
+    return [{ label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` }];
   }
 
   if (type === 'generator') {
@@ -29,16 +27,15 @@ function getRatingItems(type, data) {
   }
 
   if (type === 'utility') {
-    return [
-      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
-      { label: 'V', value: `${Number(data.vm_pu || 0).toFixed(2)} pu` }
-    ];
+    return [{ label: 'MVAsc', value: `${Number(data.mvasc || 0).toFixed(1)} MVA` }];
   }
 
   if (type === 'transformer') {
     return [
       { label: 'HV', value: `${Number(data.hv_kv || 0).toFixed(1)} kV` },
-      { label: 'LV', value: `${Number(data.lv_kv || 0).toFixed(1)} kV` }
+      { label: 'LV', value: `${Number(data.lv_kv || 0).toFixed(1)} kV` },
+      { label: 'VG', value: data.vector_group || '-' },
+      { label: 'X/R', value: Number(data.xr_ratio || 0).toFixed(1) }
     ];
   }
 
@@ -55,6 +52,9 @@ function NodeShell({
   allowBottomSource = true
 }) {
   const hasFaultResult = Boolean(data?.faultCurrentKa != null && data?.faultVoltageKv != null);
+  const hasLoadFlowResult = Boolean(
+    data?.loadFlowCurrentKa != null || data?.loadFlowVoltageKv != null
+  );
   const hasRatings = showRating && ratingItems.length > 0;
 
   return (
@@ -84,6 +84,16 @@ function NodeShell({
           <div>Vn: {Number(data.faultVoltageKv).toFixed(3)} kV</div>
         </div>
       )}
+      {hasLoadFlowResult && (
+        <div className="loadflow-metrics">
+          {data?.loadFlowCurrentKa != null && (
+            <div>I: {Number(data.loadFlowCurrentKa).toFixed(3)} kA</div>
+          )}
+          {data?.loadFlowVoltageKv != null && (
+            <div>V: {Number(data.loadFlowVoltageKv).toFixed(3)} kV</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -91,6 +101,11 @@ function NodeShell({
 export function BusNode({ data }) {
   const handleOffsets = [8, 22, 36, 50, 64, 78, 92];
   const hasFaultResult = data?.faultCurrentKa != null && data?.faultVoltageKv != null;
+  const hasBusLoadFlowData = Boolean(
+    data?.loadFlowVoltageKv != null ||
+      data?.loadFlowIncomingCurrentKa != null ||
+      data?.loadFlowOutgoingCurrentKa != null
+  );
   const isFaultHighlighted = Boolean(data?.isFaulted || data?.isFaultSelected);
 
   return (
@@ -120,6 +135,19 @@ export function BusNode({ data }) {
         <div className="symbol-label">{data.label}</div>
         <div className="bus-kv">{Number(data.vn_kv || 0).toFixed(1)} kV</div>
       </div>
+      {hasBusLoadFlowData && (
+        <>
+          <div className="bus-current bus-current--incoming">
+            I in: {Number(data.loadFlowIncomingCurrentKa || 0).toFixed(3)} kA
+          </div>
+          <div className="bus-current bus-current--outgoing">
+            I out: {Number(data.loadFlowOutgoingCurrentKa || 0).toFixed(3)} kA
+          </div>
+          <div className="loadflow-metrics loadflow-metrics--bus-right">
+            V: {Number(data.loadFlowVoltageKv || 0).toFixed(3)} kV
+          </div>
+        </>
+      )}
       {hasFaultResult && (
         <div className="fault-metrics fault-metrics--bus-side">
           <div>Isc {Number(data.faultCurrentKa).toFixed(3)} kA</div>

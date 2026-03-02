@@ -113,6 +113,15 @@ export default function ControlPanel({
                 />
               </label>
               <label>
+                Motor kV
+                <input
+                  type="number"
+                  step="0.1"
+                  value={selectedNode.data.kv}
+                  onChange={(e) => onUpdateNode('kv', Number(e.target.value))}
+                />
+              </label>
+              <label>
                 Motor P (MW)
                 <input
                   type="number"
@@ -122,12 +131,14 @@ export default function ControlPanel({
                 />
               </label>
               <label>
-                Motor Q (MVAr)
+                Motor pf
                 <input
                   type="number"
-                  step="0.1"
-                  value={selectedNode.data.q_mvar}
-                  onChange={(e) => onUpdateNode('q_mvar', Number(e.target.value))}
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={selectedNode.data.pf}
+                  onChange={(e) => onUpdateNode('pf', Number(e.target.value))}
                 />
               </label>
             </>
@@ -195,21 +206,12 @@ export default function ControlPanel({
                 />
               </label>
               <label>
-                P (MW)
+                MVAsc (MVA)
                 <input
                   type="number"
-                  step="0.1"
-                  value={selectedNode.data.p_mw}
-                  onChange={(e) => onUpdateNode('p_mw', Number(e.target.value))}
-                />
-              </label>
-              <label>
-                Vm (pu)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={selectedNode.data.vm_pu}
-                  onChange={(e) => onUpdateNode('vm_pu', Number(e.target.value))}
+                  step="1"
+                  value={selectedNode.data.mvasc}
+                  onChange={(e) => onUpdateNode('mvasc', Number(e.target.value))}
                 />
               </label>
             </>
@@ -240,6 +242,22 @@ export default function ControlPanel({
                   step="0.1"
                   value={selectedNode.data.lv_kv}
                   onChange={(e) => onUpdateNode('lv_kv', Number(e.target.value))}
+                />
+              </label>
+              <label>
+                Vector Group
+                <input
+                  value={selectedNode.data.vector_group}
+                  onChange={(e) => onUpdateNode('vector_group', e.target.value)}
+                />
+              </label>
+              <label>
+                X/R Ratio
+                <input
+                  type="number"
+                  step="0.1"
+                  value={selectedNode.data.xr_ratio}
+                  onChange={(e) => onUpdateNode('xr_ratio', Number(e.target.value))}
                 />
               </label>
             </>

@@ -23,24 +23,55 @@ import {
 } from '../components/SymbolNodes';
 
 const API_BASE = 'http://127.0.0.1:8000';
+const STORAGE_KEY_PREFIX = 'openpower:network:';
+const LOAD_FLOW_NODE_TYPES = new Set(['load', 'resistive_load', 'generator', 'utility']);
+
+function getStorageKey(studyType) {
+  return `${STORAGE_KEY_PREFIX}${studyType}`;
+}
+
+function loadPersistedGraph(studyType) {
+  if (typeof window === 'undefined') {
+    return { nodes: [], edges: [] };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(getStorageKey(studyType));
+    if (!raw) return { nodes: [], edges: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      nodes: Array.isArray(parsed?.nodes) ? parsed.nodes : [],
+      edges: Array.isArray(parsed?.edges) ? parsed.edges : []
+    };
+  } catch {
+    return { nodes: [], edges: [] };
+  }
+}
 
 const defaultDataByType = {
   bus: (index) => ({ label: `Bus ${index}`, vn_kv: 11 }),
-  load: (index) => ({ label: `Motor ${index}`, p_mw: 1.5, q_mvar: 0.7 }),
-  resistive_load: (index) => ({ label: `Resistive ${index}`, p_mw: 1.2, q_mvar: 0.0 }),
+  load: (index) => ({ label: `Motor ${index}`, kv: 0.415, p_mw: 1.5, pf: 0.9 }),
+  resistive_load: (index) => ({ label: `Resistive ${index}`, p_mw: 1.2 }),
   generator: (index) => ({ label: `Gen ${index}`, p_mw: 1.0, vm_pu: 1.0 }),
-  utility: (index) => ({ label: `Utility ${index}`, p_mw: 0.0, vm_pu: 1.0 }),
-  transformer: (index) => ({ label: `TX ${index}`, hv_kv: 33, lv_kv: 11 })
+  utility: (index) => ({ label: `Utility ${index}`, mvasc: 1000, vm_pu: 1.0, p_mw: 0.0 }),
+  transformer: (index) => ({
+    label: `TX ${index}`,
+    hv_kv: 33,
+    lv_kv: 11,
+    vector_group: 'Dyn11',
+    xr_ratio: 10
+  })
 };
 
 export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
+  const initialGraph = useMemo(() => loadPersistedGraph(studyType), [studyType]);
   const reactFlowWrapper = useRef(null);
   const historyRef = useRef([]);
   const futureRef = useRef([]);
   const isRestoringHistoryRef = useRef(false);
   const lastSnapshotRef = useRef('');
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialGraph.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialGraph.edges);
   const [rfInstance, setRfInstance] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedNodes, setSelectedNodes] = useState([]);
@@ -128,6 +159,27 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       setEdges((currentEdges) => reconnectEdge(oldEdge, newConnection, currentEdges)),
     [setEdges]
   );
+
+  const clearLoadFlowAnnotations = useCallback(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          loadFlowCurrentKa: undefined,
+          loadFlowVoltageKv: undefined,
+          loadFlowIncomingCurrentKa: undefined,
+          loadFlowOutgoingCurrentKa: undefined
+        }
+      }))
+    );
+    setEdges((currentEdges) =>
+      currentEdges.map((edge) => ({
+        ...edge,
+        label: undefined
+      }))
+    );
+  }, [setNodes, setEdges]);
 
   const onDrop = useCallback(
     (event) => {
@@ -290,7 +342,11 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             ...node.data,
             isFaulted: false,
             faultCurrentKa: undefined,
-            faultVoltageKv: undefined
+            faultVoltageKv: undefined,
+            loadFlowCurrentKa: undefined,
+            loadFlowVoltageKv: undefined,
+            loadFlowIncomingCurrentKa: undefined,
+            loadFlowOutgoingCurrentKa: undefined
           },
           selected: true
         };
@@ -343,12 +399,18 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
     const loads = nodes
       .filter((n) => n.type === 'load' || n.type === 'resistive_load')
-      .map((n) => ({
-        id: n.id,
-        bus: resolveConnectedBus(n.id),
-        p_mw: Number(n.data.p_mw),
-        q_mvar: n.type === 'resistive_load' ? 0 : Number(n.data.q_mvar)
-      }))
+      .map((n) => {
+        const pMw = Number(n.data.p_mw);
+        const pfRaw = Number(n.data.pf);
+        const pf = Number.isFinite(pfRaw) && pfRaw > 0 && pfRaw <= 1 ? pfRaw : 1;
+        const qFromPf = pMw * Math.tan(Math.acos(pf));
+        return {
+          id: n.id,
+          bus: resolveConnectedBus(n.id),
+          p_mw: pMw,
+          q_mvar: n.type === 'resistive_load' ? 0 : qFromPf
+        };
+      })
       .filter((l) => l.bus);
 
     const generators = nodes
@@ -412,6 +474,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
         const response = await axios.post(`${API_BASE}${endpoint}`, payload);
         if (studyType === 'shortcircuit') {
+          clearLoadFlowAnnotations();
           const faultBusId = response.data?.fault?.bus_id;
           const currentKa = response.data?.fault_bus?.current_ka;
           const voltageKv = response.data?.fault_bus?.voltage_level_kv;
@@ -435,25 +498,187 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                   ...node.data,
                   isFaulted: false,
                   faultCurrentKa: undefined,
-                  faultVoltageKv: undefined
+                  faultVoltageKv: undefined,
+                  loadFlowCurrentKa: undefined,
+                  loadFlowVoltageKv: undefined,
+                  loadFlowIncomingCurrentKa: undefined,
+                  loadFlowOutgoingCurrentKa: undefined
                 }
               };
             })
           );
         } else {
-          setNodes((currentNodes) =>
-            currentNodes.map((node) => ({
-              ...node,
-              data:
-                node.type === 'bus'
-                  ? {
-                      ...node.data,
-                      isFaulted: false,
-                      faultCurrentKa: undefined,
-                      faultVoltageKv: undefined
-                    }
-                  : node.data
-            }))
+          const busResults = response.data?.buses || {};
+          const lineResults = response.data?.lines || {};
+          const loadResults = response.data?.loads || {};
+          const generatorResults = response.data?.generators || {};
+
+          setNodes((currentNodes) => {
+            const typeById = new Map(currentNodes.map((node) => [node.id, node.type]));
+            const busCurrentTotals = new Map();
+
+            const getLineCurrentFromResult = (lineResult) =>
+              Math.max(Math.abs(Number(lineResult?.i_from_ka || 0)), Math.abs(Number(lineResult?.i_to_ka || 0)));
+
+            const getEdgeCurrent = (edge) => {
+              const directLineResult = lineResults[edge.id];
+              if (directLineResult) {
+                return getLineCurrentFromResult(directLineResult);
+              }
+
+              const sourceType = typeById.get(edge.source);
+              const targetType = typeById.get(edge.target);
+
+              const transformerNodeId =
+                sourceType === 'transformer'
+                  ? edge.source
+                  : targetType === 'transformer'
+                    ? edge.target
+                    : null;
+              if (transformerNodeId && lineResults[`line-${transformerNodeId}`]) {
+                return getLineCurrentFromResult(lineResults[`line-${transformerNodeId}`]);
+              }
+
+              if (LOAD_FLOW_NODE_TYPES.has(sourceType)) {
+                return Math.abs(
+                  Number(loadResults[edge.source]?.current_ka || generatorResults[edge.source]?.current_ka || 0)
+                );
+              }
+              if (LOAD_FLOW_NODE_TYPES.has(targetType)) {
+                return Math.abs(
+                  Number(loadResults[edge.target]?.current_ka || generatorResults[edge.target]?.current_ka || 0)
+                );
+              }
+              return 0;
+            };
+
+            const nodesWithMetrics = currentNodes.map((node) => {
+              if (node.type === 'bus') {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    isFaulted: false,
+                    faultCurrentKa: undefined,
+                    faultVoltageKv: undefined,
+                    loadFlowVoltageKv: busResults[node.id]?.vm_kv ?? undefined,
+                    loadFlowCurrentKa: undefined,
+                    loadFlowIncomingCurrentKa: 0,
+                    loadFlowOutgoingCurrentKa: 0
+                  }
+                };
+              }
+
+              if (node.type === 'load' || node.type === 'resistive_load') {
+                const entry = loadResults[node.id];
+                const currentKa = entry?.current_ka;
+                const voltageKv = entry?.voltage_kv;
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    loadFlowCurrentKa: currentKa,
+                    loadFlowVoltageKv: voltageKv
+                  }
+                };
+              }
+
+              if (node.type === 'generator' || node.type === 'utility') {
+                const entry = generatorResults[node.id];
+                const currentKa = entry?.current_ka;
+                const voltageKv = entry?.voltage_kv;
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    loadFlowCurrentKa: currentKa,
+                    loadFlowVoltageKv: voltageKv
+                  }
+                };
+              }
+
+              if (node.type === 'transformer') {
+                const lineEntry = lineResults[`line-${node.id}`];
+                const currentKa = lineEntry ? getLineCurrentFromResult(lineEntry) : undefined;
+                const voltageKv =
+                  lineEntry?.from_bus_id && busResults[lineEntry.from_bus_id]?.vm_kv != null
+                    ? busResults[lineEntry.from_bus_id].vm_kv
+                    : lineEntry?.to_bus_id && busResults[lineEntry.to_bus_id]?.vm_kv != null
+                      ? busResults[lineEntry.to_bus_id].vm_kv
+                      : undefined;
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    loadFlowCurrentKa: currentKa,
+                    loadFlowVoltageKv: voltageKv
+                  }
+                };
+              }
+
+              return node;
+            });
+
+            edges.forEach((edge) => {
+              const currentKa = getEdgeCurrent(edge);
+              if (!Number.isFinite(currentKa) || currentKa <= 0) return;
+
+              if (typeById.get(edge.source) === 'bus') {
+                const existing = busCurrentTotals.get(edge.source) || { incoming: 0, outgoing: 0 };
+                existing.outgoing += currentKa;
+                busCurrentTotals.set(edge.source, existing);
+              }
+              if (typeById.get(edge.target) === 'bus') {
+                const existing = busCurrentTotals.get(edge.target) || { incoming: 0, outgoing: 0 };
+                existing.incoming += currentKa;
+                busCurrentTotals.set(edge.target, existing);
+              }
+            });
+
+            return nodesWithMetrics.map((node) => {
+              if (node.type !== 'bus') return node;
+              const totals = busCurrentTotals.get(node.id) || { incoming: 0, outgoing: 0 };
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  loadFlowIncomingCurrentKa: totals.incoming,
+                  loadFlowOutgoingCurrentKa: totals.outgoing
+                }
+              };
+            });
+          });
+
+          setEdges((currentEdges) =>
+            currentEdges.map((edge) => {
+              const directLineResult = lineResults[edge.id];
+              const sourceNode = nodes.find((node) => node.id === edge.source);
+              const targetNode = nodes.find((node) => node.id === edge.target);
+              const transformerNodeId =
+                sourceNode?.type === 'transformer'
+                  ? sourceNode.id
+                  : targetNode?.type === 'transformer'
+                    ? targetNode.id
+                    : null;
+              const transformerLineResult = transformerNodeId ? lineResults[`line-${transformerNodeId}`] : null;
+              const componentCurrent =
+                loadResults[edge.source]?.current_ka ||
+                generatorResults[edge.source]?.current_ka ||
+                loadResults[edge.target]?.current_ka ||
+                generatorResults[edge.target]?.current_ka;
+              const lineCurrent =
+                directLineResult || transformerLineResult
+                  ? Math.max(
+                      Math.abs(Number((directLineResult || transformerLineResult)?.i_from_ka || 0)),
+                      Math.abs(Number((directLineResult || transformerLineResult)?.i_to_ka || 0))
+                    )
+                  : Number(componentCurrent || 0);
+              const hasCurrentLabel = Number.isFinite(lineCurrent) && lineCurrent > 0;
+              return {
+                ...edge,
+                label: hasCurrentLabel ? `I ${lineCurrent.toFixed(3)} kA` : undefined
+              };
+            })
           );
         }
         setResult(response.data);
@@ -461,7 +686,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         setError(err.response?.data?.detail || err.message);
       }
     },
-    [mapToPayload, shortCircuitFaultBusId, shortCircuitFaultType]
+    [mapToPayload, shortCircuitFaultBusId, shortCircuitFaultType, clearLoadFlowAnnotations, edges, nodes]
   );
 
   const onUpdateNode = (field, value) => {
@@ -505,31 +730,31 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         id: 'load-1',
         type: 'load',
         position: { x: symbolX(busX + 18), y: 530 },
-        data: { label: 'Motor A', p_mw: 4, q_mvar: 1.5 }
+        data: { label: 'Motor A', kv: 11, p_mw: 4, pf: 0.94 }
       },
       {
         id: 'load-2',
         type: 'load',
         position: { x: symbolX(busCenterX), y: 530 },
-        data: { label: 'Motor B', p_mw: 3.2, q_mvar: 1.1 }
+        data: { label: 'Motor B', kv: 11, p_mw: 3.2, pf: 0.95 }
       },
       {
         id: 'resistive-load-1',
         type: 'resistive_load',
         position: { x: symbolX(busX + 202), y: 530 },
-        data: { label: 'Resistive A', p_mw: 1.2, q_mvar: 0 }
+        data: { label: 'Resistive A', p_mw: 1.2 }
       },
       {
         id: 'utility-1',
         type: 'utility',
         position: { x: symbolX(busCenterX), y: 20 },
-        data: { label: 'Utility', p_mw: 0, vm_pu: 1.0 }
+        data: { label: 'Utility', mvasc: 1000, vm_pu: 1.0, p_mw: 0 }
       },
       {
         id: 'transformer-1',
         type: 'transformer',
         position: { x: symbolX(busCenterX), y: 245 },
-        data: { label: 'TX 1', hv_kv: 33, lv_kv: 11 }
+        data: { label: 'TX 1', hv_kv: 33, lv_kv: 11, vector_group: 'Dyn11', xr_ratio: 10 }
       }
     ];
 
@@ -799,6 +1024,14 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     setResult(null);
     setError('');
   }, [studyType]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(getStorageKey(studyType), JSON.stringify({ nodes, edges }));
+    } catch {
+      // Ignore storage failures (quota/full/private mode) and keep editor functional.
+    }
+  }, [studyType, nodes, edges]);
 
   return (
     <div className="layout">

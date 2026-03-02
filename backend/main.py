@@ -169,21 +169,108 @@ def health() -> Dict[str, str]:
 
 @app.post('/api/calculate/load-flow')
 def calculate_load_flow(payload: NetworkInput):
-    net, _ = build_network(payload)
+    net, bus_map = build_network(payload)
 
     try:
         pp.runpp(net)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f'Load flow failed: {exc}') from exc
 
-    return {
-        'buses': net.res_bus[['vm_pu', 'va_degree', 'p_mw', 'q_mvar']].round(5).to_dict('index'),
-        'lines': (
-            net.res_line[['loading_percent', 'p_from_mw', 'p_to_mw']].round(5).to_dict('index')
-            if len(net.res_line) > 0
-            else {}
-        )
-    }
+    index_to_bus_id = {index: bus_id for bus_id, index in bus_map.items()}
+
+    buses: Dict[str, Dict[str, float]] = {}
+    for bus_index, row in net.res_bus.iterrows():
+        bus_id = index_to_bus_id.get(bus_index)
+        if not bus_id:
+            continue
+        vn_kv = float(net.bus.loc[bus_index, 'vn_kv'])
+        vm_pu = float(row['vm_pu'])
+        buses[bus_id] = {
+            'vm_pu': round(vm_pu, 5),
+            'vm_kv': round(vm_pu * vn_kv, 5),
+            'va_degree': round(float(row['va_degree']), 5),
+            'p_mw': round(float(row['p_mw']), 5),
+            'q_mvar': round(float(row['q_mvar']), 5)
+        }
+
+    lines: Dict[str, Dict[str, float]] = {}
+    if len(net.res_line) > 0:
+        for line_index, row in net.res_line.iterrows():
+            line_name = str(net.line.loc[line_index, 'name'] or f'line-{line_index}')
+            lines[line_name] = {
+                'loading_percent': round(float(row['loading_percent']), 5),
+                'i_from_ka': round(float(row['i_from_ka']), 5),
+                'i_to_ka': round(float(row['i_to_ka']), 5),
+                'p_from_mw': round(float(row['p_from_mw']), 5),
+                'p_to_mw': round(float(row['p_to_mw']), 5),
+                'q_from_mvar': round(float(row['q_from_mvar']), 5),
+                'q_to_mvar': round(float(row['q_to_mvar']), 5),
+                'from_bus_id': index_to_bus_id.get(int(net.line.loc[line_index, 'from_bus']), ''),
+                'to_bus_id': index_to_bus_id.get(int(net.line.loc[line_index, 'to_bus']), '')
+            }
+
+    def calc_current_ka(p_mw: float, q_mvar: float, voltage_kv: float) -> float:
+        if voltage_kv <= 0:
+            return 0.0
+        apparent_mva = (p_mw**2 + q_mvar**2) ** 0.5
+        return apparent_mva / ((3**0.5) * voltage_kv)
+
+    loads: Dict[str, Dict[str, float]] = {}
+    if len(net.res_load) > 0:
+        for load_index, row in net.res_load.iterrows():
+            load_id = str(net.load.loc[load_index, 'name'])
+            load_bus_index = int(net.load.loc[load_index, 'bus'])
+            load_bus_id = index_to_bus_id.get(load_bus_index, '')
+            voltage_kv = buses.get(load_bus_id, {}).get('vm_kv', float(net.bus.loc[load_bus_index, 'vn_kv']))
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            loads[load_id] = {
+                'bus_id': load_bus_id,
+                'p_mw': round(p_mw, 5),
+                'q_mvar': round(q_mvar, 5),
+                'voltage_kv': round(float(voltage_kv), 5),
+                'current_ka': round(calc_current_ka(p_mw, q_mvar, float(voltage_kv)), 5)
+            }
+
+    generators: Dict[str, Dict[str, float]] = {}
+
+    if len(net.res_gen) > 0:
+        for gen_index, row in net.res_gen.iterrows():
+            generator_id = str(net.gen.loc[gen_index, 'name'])
+            generator_bus_index = int(net.gen.loc[gen_index, 'bus'])
+            generator_bus_id = index_to_bus_id.get(generator_bus_index, '')
+            voltage_kv = buses.get(generator_bus_id, {}).get(
+                'vm_kv', float(net.bus.loc[generator_bus_index, 'vn_kv'])
+            )
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            generators[generator_id] = {
+                'bus_id': generator_bus_id,
+                'p_mw': round(p_mw, 5),
+                'q_mvar': round(q_mvar, 5),
+                'voltage_kv': round(float(voltage_kv), 5),
+                'current_ka': round(calc_current_ka(p_mw, q_mvar, float(voltage_kv)), 5)
+            }
+
+    if len(net.res_ext_grid) > 0:
+        for ext_grid_index, row in net.res_ext_grid.iterrows():
+            generator_id = str(net.ext_grid.loc[ext_grid_index, 'name'])
+            generator_bus_index = int(net.ext_grid.loc[ext_grid_index, 'bus'])
+            generator_bus_id = index_to_bus_id.get(generator_bus_index, '')
+            voltage_kv = buses.get(generator_bus_id, {}).get(
+                'vm_kv', float(net.bus.loc[generator_bus_index, 'vn_kv'])
+            )
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            generators[generator_id] = {
+                'bus_id': generator_bus_id,
+                'p_mw': round(p_mw, 5),
+                'q_mvar': round(q_mvar, 5),
+                'voltage_kv': round(float(voltage_kv), 5),
+                'current_ka': round(calc_current_ka(p_mw, q_mvar, float(voltage_kv)), 5)
+            }
+
+    return {'buses': buses, 'lines': lines, 'loads': loads, 'generators': generators}
 
 
 @app.post('/api/calculate/short-circuit')

@@ -447,6 +447,49 @@ body {
   color: #642a26;
 }
 
+.loadflow-metrics {
+  margin-top: 0.2rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #b9d2f2;
+  border-radius: 4px;
+  background: #eef6ff;
+  font-size: 0.66rem;
+  color: #1d3f68;
+}
+
+.bus-current {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  line-height: 1.15;
+  color: #1d3f68;
+  white-space: nowrap;
+}
+
+.bus-current--incoming {
+  top: -20px;
+}
+
+.bus-current--outgoing {
+  bottom: -18px;
+}
+
+.loadflow-metrics--bus-right {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d3f68;
+  font-size: 0.67rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
 .fault-metrics--bus-side {
   position: absolute;
   left: calc(100% + 12px);
