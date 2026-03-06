@@ -63,7 +63,7 @@ Open http://127.0.0.1:5173
 
 - Motor load and resistive load are both sent as backend loads.
 - Utility grid is sent as a generator source (slack/ext-grid handling remains in backend).
-- Transformer nodes are represented as short line-equivalent connections between the first two connected buses in this MVP.
+- Transformer nodes are sent to backend as explicit transformer elements (HV/LV buses + nameplate impedance).
 
 ## Notes
 

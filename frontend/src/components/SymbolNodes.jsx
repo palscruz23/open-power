@@ -1,41 +1,54 @@
 import { Handle, Position } from 'reactflow';
+import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
+
+const numberFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2
+});
+
+function formatValue(value, fallback = 0) {
+  const numericValue = Number(value ?? fallback);
+  return numberFormatter.format(Number.isFinite(numericValue) ? numericValue : fallback);
+}
 
 function getRatingItems(type, data) {
   if (!data) return [];
 
   if (type === 'bus') {
-    return [{ label: 'Vn', value: `${Number(data.vn_kv || 0).toFixed(1)} kV` }];
+    return [{ label: 'Vn', value: `${formatValue(data.vn_kv)} kV` }];
   }
 
   if (type === 'load') {
     return [
-      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
-      { label: 'kV', value: `${Number(data.kv || 0).toFixed(2)} kV` },
-      { label: 'pf', value: `${Number(data.pf || 0).toFixed(2)}` }
+      { label: 'P', value: `${formatValue(data.p_mw)} MW` },
+      { label: 'kV', value: `${formatValue(data.kv)} kV` },
+      { label: 'pf', value: formatValue(data.pf) }
     ];
   }
 
   if (type === 'resistive_load') {
-    return [{ label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` }];
+    return [{ label: 'P', value: `${formatValue(data.p_mw)} MW` }];
   }
 
   if (type === 'generator') {
     return [
-      { label: 'P', value: `${Number(data.p_mw || 0).toFixed(2)} MW` },
-      { label: 'V', value: `${Number(data.vm_pu || 0).toFixed(2)} pu` }
+      { label: 'P', value: `${formatValue(data.p_mw)} MW` },
+      { label: 'V', value: `${formatValue(data.vm_pu)} pu` }
     ];
   }
 
   if (type === 'utility') {
-    return [{ label: 'MVAsc', value: `${Number(data.mvasc || 0).toFixed(1)} MVA` }];
+    return [{ label: 'MVAsc', value: `${formatValue(data.mvasc)} MVA` }];
   }
 
   if (type === 'transformer') {
     return [
-      { label: 'HV', value: `${Number(data.hv_kv || 0).toFixed(1)} kV` },
-      { label: 'LV', value: `${Number(data.lv_kv || 0).toFixed(1)} kV` },
+      { label: 'HV', value: `${formatValue(data.hv_kv)} kV` },
+      { label: 'LV', value: `${formatValue(data.lv_kv)} kV` },
+      { label: 'MVA', value: `${formatValue(data.mva_rating)} MVA` },
+      { label: '%Z', value: `${formatValue(data.z_percent, 6)} %` },
       { label: 'VG', value: data.vector_group || '-' },
-      { label: 'X/R', value: Number(data.xr_ratio || 0).toFixed(1) }
+      { label: 'X/R', value: formatValue(data.xr_ratio) }
     ];
   }
 
@@ -80,17 +93,17 @@ function NodeShell({
       <div className="symbol-label">{data.label}</div>
       {hasFaultResult && (
         <div className="fault-metrics">
-          <div>Isc: {Number(data.faultCurrentKa).toFixed(3)} kA</div>
-          <div>Vn: {Number(data.faultVoltageKv).toFixed(3)} kV</div>
+          <div>{data?.faultCurrentLabel || 'Isc'}: {formatCurrentFromKa(data.faultCurrentKa)}</div>
+          <div>Vn: {formatVoltageFromKv(data.faultVoltageKv)}</div>
         </div>
       )}
       {hasLoadFlowResult && (
         <div className="loadflow-metrics">
           {data?.loadFlowCurrentKa != null && (
-            <div>I: {Number(data.loadFlowCurrentKa).toFixed(3)} kA</div>
+            <div>I: {formatCurrentFromKa(data.loadFlowCurrentKa)}</div>
           )}
           {data?.loadFlowVoltageKv != null && (
-            <div>V: {Number(data.loadFlowVoltageKv).toFixed(3)} kV</div>
+            <div>V: {formatVoltageFromKv(data.loadFlowVoltageKv)}</div>
           )}
         </div>
       )}
@@ -133,25 +146,25 @@ export function BusNode({ data }) {
       <div className="bus-rail" />
       <div className="bus-meta">
         <div className="symbol-label">{data.label}</div>
-        <div className="bus-kv">{Number(data.vn_kv || 0).toFixed(1)} kV</div>
+        <div className="bus-kv">{formatValue(data.vn_kv)} kV</div>
       </div>
       {hasBusLoadFlowData && (
         <>
           <div className="bus-current bus-current--incoming">
-            I in: {Number(data.loadFlowIncomingCurrentKa || 0).toFixed(3)} kA
+            I in: {formatCurrentFromKa(data.loadFlowIncomingCurrentKa)}
           </div>
           <div className="bus-current bus-current--outgoing">
-            I out: {Number(data.loadFlowOutgoingCurrentKa || 0).toFixed(3)} kA
+            I out: {formatCurrentFromKa(data.loadFlowOutgoingCurrentKa)}
           </div>
           <div className="loadflow-metrics loadflow-metrics--bus-right">
-            V: {Number(data.loadFlowVoltageKv || 0).toFixed(3)} kV
+            V: {formatVoltageFromKv(data.loadFlowVoltageKv)}
           </div>
         </>
       )}
       {hasFaultResult && (
         <div className="fault-metrics fault-metrics--bus-side">
-          <div>Isc {Number(data.faultCurrentKa).toFixed(3)} kA</div>
-          <div>Vn {Number(data.faultVoltageKv).toFixed(3)} kV</div>
+          <div>{data?.faultCurrentLabel || 'Isc'} {formatCurrentFromKa(data.faultCurrentKa)}</div>
+          <div>Vn {formatVoltageFromKv(data.faultVoltageKv)}</div>
         </div>
       )}
     </div>

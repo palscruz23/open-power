@@ -21,13 +21,54 @@ import {
   TransformerNode,
   UtilityNode
 } from '../components/SymbolNodes';
+import { formatCurrentFromKa } from '../utils/unitFormat';
 
 const API_BASE = 'http://127.0.0.1:8000';
 const STORAGE_KEY_PREFIX = 'openpower:network:';
 const LOAD_FLOW_NODE_TYPES = new Set(['load', 'resistive_load', 'generator', 'utility']);
+const TRANSIENT_NODE_DATA_KEYS = new Set([
+  'isFaulted',
+  'isFaultSelected',
+  'faultCurrentKa',
+  'faultVoltageKv',
+  'faultCurrentLabel',
+  'loadFlowCurrentKa',
+  'loadFlowVoltageKv',
+  'loadFlowIncomingCurrentKa',
+  'loadFlowOutgoingCurrentKa'
+]);
 
 function getStorageKey(studyType) {
+  if (studyType === 'loadflow' || studyType === 'shortcircuit') {
+    return `${STORAGE_KEY_PREFIX}shared`;
+  }
   return `${STORAGE_KEY_PREFIX}${studyType}`;
+}
+
+function sanitizeNodeForPersistence(node) {
+  const nextData = { ...(node?.data || {}) };
+  TRANSIENT_NODE_DATA_KEYS.forEach((key) => {
+    if (key in nextData) delete nextData[key];
+  });
+  return { ...node, data: nextData };
+}
+
+function sanitizeEdgeForPersistence(edge) {
+  return {
+    ...edge,
+    label: undefined,
+    labelStyle: undefined,
+    labelShowBg: undefined,
+    markerStart: undefined,
+    markerEnd: undefined
+  };
+}
+
+function sanitizeGraphForPersistence(graph) {
+  return {
+    nodes: Array.isArray(graph?.nodes) ? graph.nodes.map(sanitizeNodeForPersistence) : [],
+    edges: Array.isArray(graph?.edges) ? graph.edges.map(sanitizeEdgeForPersistence) : []
+  };
 }
 
 function loadPersistedGraph(studyType) {
@@ -36,13 +77,15 @@ function loadPersistedGraph(studyType) {
   }
 
   try {
-    const raw = window.localStorage.getItem(getStorageKey(studyType));
+    const currentKey = getStorageKey(studyType);
+    const legacyKey =
+      studyType === 'loadflow' || studyType === 'shortcircuit'
+        ? `${STORAGE_KEY_PREFIX}${studyType}`
+        : null;
+    const raw = window.localStorage.getItem(currentKey) || (legacyKey ? window.localStorage.getItem(legacyKey) : null);
     if (!raw) return { nodes: [], edges: [] };
     const parsed = JSON.parse(raw);
-    return {
-      nodes: Array.isArray(parsed?.nodes) ? parsed.nodes : [],
-      edges: Array.isArray(parsed?.edges) ? parsed.edges : []
-    };
+    return sanitizeGraphForPersistence(parsed);
   } catch {
     return { nodes: [], edges: [] };
   }
@@ -58,6 +101,8 @@ const defaultDataByType = {
     label: `TX ${index}`,
     hv_kv: 33,
     lv_kv: 11,
+    mva_rating: 10,
+    z_percent: 6,
     vector_group: 'Dyn11',
     xr_ratio: 10
   })
@@ -81,6 +126,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const [error, setError] = useState('');
   const [showRatings, setShowRatings] = useState(false);
   const [shortCircuitFaultType, setShortCircuitFaultType] = useState('three_phase');
+  const [shortCircuitCurrentType, setShortCircuitCurrentType] = useState('initial_symmetrical');
   const [shortCircuitFaultBusId, setShortCircuitFaultBusId] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const nodeTypes = useMemo(
@@ -146,6 +192,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               params.sourceHandle ?? (sourceNode?.type === 'bus' ? 'bottom-3' : undefined),
             targetHandle: params.targetHandle ?? (targetNode?.type === 'bus' ? 'top-3' : undefined),
             type: 'straight',
+            markerStart: undefined,
+            markerEnd: undefined,
             style: { stroke: '#b8bec7', strokeWidth: 3 }
           },
           eds
@@ -176,7 +224,11 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     setEdges((currentEdges) =>
       currentEdges.map((edge) => ({
         ...edge,
-        label: undefined
+        label: undefined,
+        labelStyle: undefined,
+        markerStart: undefined,
+        markerEnd: undefined,
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
       }))
     );
   }, [setNodes, setEdges]);
@@ -343,6 +395,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             isFaulted: false,
             faultCurrentKa: undefined,
             faultVoltageKv: undefined,
+            faultCurrentLabel: undefined,
             loadFlowCurrentKa: undefined,
             loadFlowVoltageKv: undefined,
             loadFlowIncomingCurrentKa: undefined,
@@ -383,6 +436,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       .map((n) => ({ id: n.id, name: n.data.label, vn_kv: Number(n.data.vn_kv) }));
 
     const busSet = new Set(buses.map((b) => b.id));
+    const busVoltageById = new Map(
+      buses.map((bus) => [bus.id, Number.isFinite(Number(bus.vn_kv)) ? Number(bus.vn_kv) : 0])
+    );
 
     const lines = edges
       .filter((e) => busSet.has(e.source) && busSet.has(e.target))
@@ -408,7 +464,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           id: n.id,
           bus: resolveConnectedBus(n.id),
           p_mw: pMw,
-          q_mvar: n.type === 'resistive_load' ? 0 : qFromPf
+          q_mvar: n.type === 'resistive_load' ? 0 : qFromPf,
+          load_type: n.type === 'load' ? 'motor' : 'static'
         };
       })
       .filter((l) => l.bus);
@@ -423,7 +480,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       }))
       .filter((g) => g.bus);
 
-    const transformerLines = nodes
+    const transformers = nodes
       .filter((n) => n.type === 'transformer')
       .map((transformerNode) => {
         const connectedBuses = edges
@@ -432,20 +489,49 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           .filter((nodeId) => busSet.has(nodeId));
         const uniqueBuses = [...new Set(connectedBuses)];
         if (uniqueBuses.length < 2) return null;
+
+        const hvKvRaw = Number(transformerNode.data?.hv_kv);
+        const lvKvRaw = Number(transformerNode.data?.lv_kv);
+        const mvaRatingRaw = Number(transformerNode.data?.mva_rating);
+        const zPercentRaw = Number(transformerNode.data?.z_percent);
+        const xrRatioRaw = Number(transformerNode.data?.xr_ratio);
+
+        const hvKv = Number.isFinite(hvKvRaw) && hvKvRaw > 0 ? hvKvRaw : 11;
+        const lvKv = Number.isFinite(lvKvRaw) && lvKvRaw > 0 ? lvKvRaw : hvKv;
+        const mvaRating = Number.isFinite(mvaRatingRaw) && mvaRatingRaw > 0 ? mvaRatingRaw : 10;
+        const zPercent = Number.isFinite(zPercentRaw) && zPercentRaw > 0 ? zPercentRaw : 6;
+        const xrRatio = Number.isFinite(xrRatioRaw) && xrRatioRaw > 0 ? xrRatioRaw : 10;
+        const vkPercent = Math.max(zPercent, 0.01);
+        const vkrPercent = Math.max(vkPercent / Math.sqrt(1 + xrRatio ** 2), 0.001);
+
+        const [busA, busB] = uniqueBuses;
+        const busAKv = busVoltageById.get(busA) ?? 0;
+        const busBKv = busVoltageById.get(busB) ?? 0;
+        const directMatchError = Math.abs(busAKv - hvKv) + Math.abs(busBKv - lvKv);
+        const swappedMatchError = Math.abs(busBKv - hvKv) + Math.abs(busAKv - lvKv);
+        const hvBus = directMatchError <= swappedMatchError ? busA : busB;
+        const lvBus = hvBus === busA ? busB : busA;
+
         return {
-          id: `line-${transformerNode.id}`,
-          from_bus: uniqueBuses[0],
-          to_bus: uniqueBuses[1],
-          length_km: 0.05,
-          r_ohm_per_km: 0.08,
-          x_ohm_per_km: 0.12,
-          c_nf_per_km: 0,
-          max_i_ka: 0.8
+          id: transformerNode.id,
+          hv_bus: hvBus,
+          lv_bus: lvBus,
+          sn_mva: mvaRating,
+          vn_hv_kv: hvKv,
+          vn_lv_kv: lvKv,
+          vk_percent: vkPercent,
+          vkr_percent: vkrPercent,
+          vector_group:
+            typeof transformerNode.data?.vector_group === 'string' &&
+            transformerNode.data.vector_group.trim().length > 0
+              ? transformerNode.data.vector_group.trim()
+              : null,
+          shift_degree: 0
         };
       })
       .filter(Boolean);
 
-    return { buses, lines: [...lines, ...transformerLines], loads, generators };
+    return { buses, lines, transformers, loads, generators };
   }, [nodes, edges, resolveConnectedBus]);
 
   const callStudy = useCallback(
@@ -470,6 +556,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
           payload.fault_bus_id = shortCircuitFaultBusId;
           payload.fault_type = shortCircuitFaultType;
+          payload.current_type = shortCircuitCurrentType;
         }
 
         const response = await axios.post(`${API_BASE}${endpoint}`, payload);
@@ -478,6 +565,95 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           const faultBusId = response.data?.fault?.bus_id;
           const currentKa = response.data?.fault_bus?.current_ka;
           const voltageKv = response.data?.fault_bus?.voltage_level_kv;
+          const currentTypeLabel = response.data?.fault?.current_type_label || 'Short-circuit current';
+          const branchResults = response.data?.branches || {};
+          const motorContributions = response.data?.motor_contributions || {};
+          const nodeTypeById = new Map(nodes.map((node) => [node.id, node.type]));
+          const nodeLabelById = new Map(
+            nodes.map((node) => [node.id, String(node.data?.label || node.id)])
+          );
+
+          const adjacency = new Map();
+          Object.values(branchResults).forEach((branch) => {
+            const fromBus = branch?.from_bus_id;
+            const toBus = branch?.to_bus_id;
+            if (!fromBus || !toBus) return;
+            if (!adjacency.has(fromBus)) adjacency.set(fromBus, new Set());
+            if (!adjacency.has(toBus)) adjacency.set(toBus, new Set());
+            adjacency.get(fromBus).add(toBus);
+            adjacency.get(toBus).add(fromBus);
+          });
+
+          const busDistanceToFault = new Map();
+          if (faultBusId) {
+            const queue = [faultBusId];
+            busDistanceToFault.set(faultBusId, 0);
+            while (queue.length > 0) {
+              const currentBus = queue.shift();
+              const currentDistance = busDistanceToFault.get(currentBus) ?? 0;
+              const neighbors = adjacency.get(currentBus);
+              if (!neighbors) continue;
+              neighbors.forEach((nextBus) => {
+                if (busDistanceToFault.has(nextBus)) return;
+                busDistanceToFault.set(nextBus, currentDistance + 1);
+                queue.push(nextBus);
+              });
+            }
+          }
+
+          const resolveBranchResult = (edge) => {
+            if (branchResults[edge.id]) return branchResults[edge.id];
+            const sourceType = nodeTypeById.get(edge.source);
+            const targetType = nodeTypeById.get(edge.target);
+            const transformerNodeId =
+              sourceType === 'transformer'
+                ? edge.source
+                : targetType === 'transformer'
+                  ? edge.target
+                  : null;
+            return transformerNodeId ? branchResults[`line-${transformerNodeId}`] : null;
+          };
+
+          const resolveContributionKa = (branch) => {
+            const candidates = [
+              Number(branch?.current_ka),
+              Number(branch?.from_current_ka),
+              Number(branch?.to_current_ka),
+              Number(branch?.contribution_ka),
+              Number(branch?.ikss_ka),
+              Number(branch?.from_ikss_ka),
+              Number(branch?.to_ikss_ka)
+            ].filter((value) => Number.isFinite(value) && value > 0);
+            if (candidates.length === 0) return null;
+            return Math.max(...candidates);
+          };
+
+          const resolveContributionDirection = (branch) => {
+            const fromBus = branch?.from_bus_id;
+            const toBus = branch?.to_bus_id;
+            if (!fromBus || !toBus) return null;
+
+            const fromDistance = busDistanceToFault.get(fromBus);
+            const toDistance = busDistanceToFault.get(toBus);
+            let towardBus = null;
+
+            if (Number.isFinite(fromDistance) && Number.isFinite(toDistance) && fromDistance !== toDistance) {
+              towardBus = fromDistance < toDistance ? fromBus : toBus;
+            } else if (fromBus === faultBusId) {
+              towardBus = fromBus;
+            } else if (toBus === faultBusId) {
+              towardBus = toBus;
+            }
+
+            if (towardBus === fromBus) {
+              return { fromId: toBus, toId: fromBus };
+            }
+            if (towardBus === toBus) {
+              return { fromId: fromBus, toId: toBus };
+            }
+            return null;
+          };
+
           setNodes((currentNodes) =>
             currentNodes.map((node) => {
               if (node.type !== 'bus') return node;
@@ -488,7 +664,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                     ...node.data,
                     isFaulted: true,
                     faultCurrentKa: currentKa,
-                    faultVoltageKv: voltageKv
+                    faultVoltageKv: voltageKv,
+                    faultCurrentLabel: currentTypeLabel
                   }
                 };
               }
@@ -499,11 +676,145 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                   isFaulted: false,
                   faultCurrentKa: undefined,
                   faultVoltageKv: undefined,
+                  faultCurrentLabel: undefined,
                   loadFlowCurrentKa: undefined,
                   loadFlowVoltageKv: undefined,
                   loadFlowIncomingCurrentKa: undefined,
                   loadFlowOutgoingCurrentKa: undefined
                 }
+              };
+            })
+          );
+          setEdges((currentEdges) =>
+            currentEdges.map((edge) => {
+              const branchResult = resolveBranchResult(edge);
+              const contributionKa = resolveContributionKa(branchResult);
+              const hasBranchContribution = Number.isFinite(contributionKa) && contributionKa > 0;
+              const sourceMotorContribution = motorContributions[edge.source];
+              const targetMotorContribution = motorContributions[edge.target];
+              const branchDirection = resolveContributionDirection(branchResult);
+              const motorContribution =
+                sourceMotorContribution && nodeTypeById.get(edge.target) === 'bus'
+                  ? {
+                      currentKa: Number(sourceMotorContribution.current_ka),
+                      fromId: edge.source,
+                      toId: edge.target
+                    }
+                  : targetMotorContribution && nodeTypeById.get(edge.source) === 'bus'
+                    ? {
+                        currentKa: Number(targetMotorContribution.current_ka),
+                        fromId: edge.target,
+                        toId: edge.source
+                      }
+                    : null;
+              const hasMotorContribution =
+                Number.isFinite(Number(motorContribution?.currentKa)) && Number(motorContribution?.currentKa) > 0;
+              const sourceNodeType = nodeTypeById.get(edge.source);
+              const targetNodeType = nodeTypeById.get(edge.target);
+              const sourceNodeContribution =
+                sourceNodeType === 'utility' && targetNodeType === 'bus'
+                  ? { sourceId: edge.source, busId: edge.target }
+                  : targetNodeType === 'utility' && sourceNodeType === 'bus'
+                    ? { sourceId: edge.target, busId: edge.source }
+                    : sourceNodeType === 'generator' && targetNodeType === 'bus'
+                      ? { sourceId: edge.source, busId: edge.target }
+                      : targetNodeType === 'generator' && sourceNodeType === 'bus'
+                        ? { sourceId: edge.target, busId: edge.source }
+                        : null;
+              const derivedSourceContributionKa =
+                !hasBranchContribution && !hasMotorContribution && sourceNodeContribution
+                  ? currentEdges.reduce((best, candidateEdge) => {
+                      if (candidateEdge.id === edge.id) return best;
+                      if (
+                        candidateEdge.source !== sourceNodeContribution.busId &&
+                        candidateEdge.target !== sourceNodeContribution.busId
+                      ) {
+                        return best;
+                      }
+
+                      const candidateBranchResult = resolveBranchResult(candidateEdge);
+                      const candidateDirection = resolveContributionDirection(candidateBranchResult);
+                      if (!candidateDirection || candidateDirection.fromId !== sourceNodeContribution.busId) {
+                        return best;
+                      }
+
+                      const candidateKa = resolveContributionKa(candidateBranchResult);
+                      if (!Number.isFinite(candidateKa) || candidateKa <= 0) return best;
+                      return Math.max(best, candidateKa);
+                    }, 0)
+                  : 0;
+              const hasSourceContribution =
+                Number.isFinite(Number(derivedSourceContributionKa)) && Number(derivedSourceContributionKa) > 0;
+              const effectiveContributionKa = hasBranchContribution
+                ? contributionKa
+                : hasMotorContribution
+                  ? Number(motorContribution.currentKa)
+                  : hasSourceContribution
+                    ? Number(derivedSourceContributionKa)
+                  : null;
+              const effectiveDirection = hasBranchContribution
+                ? branchDirection
+                : hasMotorContribution
+                  ? { fromId: motorContribution.fromId, toId: motorContribution.toId }
+                  : hasSourceContribution
+                    ? { fromId: sourceNodeContribution.sourceId, toId: sourceNodeContribution.busId }
+                  : null;
+              const hasDirection = Boolean(effectiveDirection?.fromId && effectiveDirection?.toId);
+              const contributesToFaultBus = hasDirection && effectiveDirection.toId === faultBusId;
+              const edgeTouchesFaultSide =
+                hasDirection &&
+                (edge.source === effectiveDirection.toId || edge.target === effectiveDirection.toId);
+              const isSourceEdgeContribution = hasSourceContribution && Boolean(sourceNodeContribution);
+              const shouldShowContributionLabel =
+                effectiveContributionKa != null &&
+                (contributesToFaultBus ? edgeTouchesFaultSide : isSourceEdgeContribution);
+              const fromPos = hasDirection ? nodes.find((node) => node.id === effectiveDirection.fromId)?.position : null;
+              const toPos = hasDirection ? nodes.find((node) => node.id === effectiveDirection.toId)?.position : null;
+              const dx = (toPos?.x || 0) - (fromPos?.x || 0);
+              const dy = (toPos?.y || 0) - (fromPos?.y || 0);
+              const vectorMagnitude = Math.hypot(dx, dy);
+              const labelOffsetDistance = hasBranchContribution
+                ? 15
+                : hasMotorContribution
+                  ? 50
+                  : hasSourceContribution
+                    ? 42
+                  : 28;
+              const labelOffsetX =
+                vectorMagnitude > 0 ? (dx / vectorMagnitude) * labelOffsetDistance : 0;
+              const labelOffsetY =
+                vectorMagnitude > 0 ? (dy / vectorMagnitude) * labelOffsetDistance : 0;
+              const arrowGlyph =
+                Math.abs(dy) >= Math.abs(dx)
+                  ? dy >= 0
+                    ? '\u2193'
+                    : '\u2191'
+                  : dx >= 0
+                    ? '\u2192'
+                    : '\u2190';
+              return {
+                ...edge,
+                label:
+                  shouldShowContributionLabel
+                    ? `${arrowGlyph} ${formatCurrentFromKa(effectiveContributionKa)}`
+                    : undefined,
+                labelStyle:
+                  shouldShowContributionLabel
+                    ? {
+                        color: '#b42318',
+                        fill: '#b42318',
+                        fontWeight: 700,
+                        fontSize: 14,
+                        transform: `translate(${labelOffsetX}px, ${labelOffsetY}px)`
+                      }
+                    : undefined,
+                labelShowBg: false,
+                style:
+                  shouldShowContributionLabel
+                    ? { stroke: '#8a8f98', strokeWidth: 2.4 }
+                    : { stroke: '#b8bec7', strokeWidth: 3 },
+                markerStart: undefined,
+                markerEnd: undefined
               };
             })
           );
@@ -561,6 +872,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                     isFaulted: false,
                     faultCurrentKa: undefined,
                     faultVoltageKv: undefined,
+                    faultCurrentLabel: undefined,
                     loadFlowVoltageKv: busResults[node.id]?.vm_kv ?? undefined,
                     loadFlowCurrentKa: undefined,
                     loadFlowIncomingCurrentKa: 0,
@@ -676,7 +988,12 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               const hasCurrentLabel = Number.isFinite(lineCurrent) && lineCurrent > 0;
               return {
                 ...edge,
-                label: hasCurrentLabel ? `I ${lineCurrent.toFixed(3)} kA` : undefined
+                label: hasCurrentLabel ? `I ${formatCurrentFromKa(lineCurrent)}` : undefined,
+                labelStyle: undefined,
+                labelShowBg: undefined,
+                markerStart: undefined,
+                markerEnd: undefined,
+                style: { stroke: '#b8bec7', strokeWidth: 3 }
               };
             })
           );
@@ -686,7 +1003,15 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         setError(err.response?.data?.detail || err.message);
       }
     },
-    [mapToPayload, shortCircuitFaultBusId, shortCircuitFaultType, clearLoadFlowAnnotations, edges, nodes]
+    [
+      mapToPayload,
+      shortCircuitFaultBusId,
+      shortCircuitFaultType,
+      shortCircuitCurrentType,
+      clearLoadFlowAnnotations,
+      edges,
+      nodes
+    ]
   );
 
   const onUpdateNode = (field, value) => {
@@ -703,7 +1028,10 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     const normalizedNodes = graphNodes.map(({ selected, dragging, positionAbsolute, ...node }) => ({
       ...node
     }));
-    const normalizedEdges = graphEdges.map(({ selected, ...edge }) => ({ ...edge }));
+    const normalizedEdges = graphEdges.map(({ selected, label, ...edge }) => ({
+      ...edge,
+      label: typeof label === 'string' || typeof label === 'number' ? label : undefined
+    }));
     return {
       nodes: JSON.parse(JSON.stringify(normalizedNodes)),
       edges: JSON.parse(JSON.stringify(normalizedEdges))
@@ -754,7 +1082,15 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         id: 'transformer-1',
         type: 'transformer',
         position: { x: symbolX(busCenterX), y: 245 },
-        data: { label: 'TX 1', hv_kv: 33, lv_kv: 11, vector_group: 'Dyn11', xr_ratio: 10 }
+        data: {
+          label: 'TX 1',
+          hv_kv: 33,
+          lv_kv: 11,
+          mva_rating: 10,
+          z_percent: 6,
+          vector_group: 'Dyn11',
+          xr_ratio: 10
+        }
       }
     ];
 
@@ -765,6 +1101,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'bus-1',
         targetHandle: 'top-3',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       },
       {
@@ -773,6 +1111,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'transformer-1',
         sourceHandle: 'bottom-3',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       },
       {
@@ -781,6 +1121,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'bus-2',
         targetHandle: 'top-3',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       },
       {
@@ -789,6 +1131,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'load-1',
         sourceHandle: 'bottom-0',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       },
       {
@@ -797,6 +1141,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'load-2',
         sourceHandle: 'bottom-3',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       },
       {
@@ -805,6 +1151,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         target: 'resistive-load-1',
         sourceHandle: 'bottom-6',
         type: 'straight',
+        markerStart: undefined,
+        markerEnd: undefined,
         style: { stroke: '#b8bec7', strokeWidth: 3 }
       }
     ];
@@ -1027,7 +1375,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(getStorageKey(studyType), JSON.stringify({ nodes, edges }));
+      const sanitizedGraph = sanitizeGraphForPersistence({ nodes, edges });
+      window.localStorage.setItem(getStorageKey(studyType), JSON.stringify(sanitizedGraph));
     } catch {
       // Ignore storage failures (quota/full/private mode) and keep editor functional.
     }
@@ -1056,7 +1405,12 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          defaultEdgeOptions={{ type: 'straight', style: { stroke: '#b8bec7', strokeWidth: 3 } }}
+          defaultEdgeOptions={{
+            type: 'straight',
+            markerStart: undefined,
+            markerEnd: undefined,
+            style: { stroke: '#b8bec7', strokeWidth: 3 }
+          }}
           connectionLineType={ConnectionLineType.Straight}
           edgesUpdatable
           reconnectRadius={20}
@@ -1124,6 +1478,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         busNodes={busNodes}
         shortCircuitFaultType={shortCircuitFaultType}
         onShortCircuitFaultTypeChange={setShortCircuitFaultType}
+        shortCircuitCurrentType={shortCircuitCurrentType}
+        onShortCircuitCurrentTypeChange={setShortCircuitCurrentType}
         shortCircuitFaultBusId={shortCircuitFaultBusId}
         onShortCircuitFaultBusIdChange={setShortCircuitFaultBusId}
       />

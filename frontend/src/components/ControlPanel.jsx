@@ -12,6 +12,8 @@ export default function ControlPanel({
   busNodes,
   shortCircuitFaultType,
   onShortCircuitFaultTypeChange,
+  shortCircuitCurrentType,
+  onShortCircuitCurrentTypeChange,
   shortCircuitFaultBusId,
   onShortCircuitFaultBusIdChange
 }) {
@@ -67,6 +69,17 @@ export default function ControlPanel({
               ))}
             </select>
           </label>
+          <label>
+            Current Required
+            <select
+              value={shortCircuitCurrentType}
+              onChange={(e) => onShortCircuitCurrentTypeChange(e.target.value)}
+            >
+              <option value="initial_symmetrical">Initial symmetrical current</option>
+              <option value="peak">Peak short-circuit current</option>
+              <option value="thermal_equivalent">Thermal equivalent current</option>
+            </select>
+          </label>
         </div>
       )}
 
@@ -96,7 +109,7 @@ export default function ControlPanel({
                 Voltage (kV)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.vn_kv}
                   onChange={(e) => onUpdateNode('vn_kv', Number(e.target.value))}
                 />
@@ -116,7 +129,7 @@ export default function ControlPanel({
                 Motor kV
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.kv}
                   onChange={(e) => onUpdateNode('kv', Number(e.target.value))}
                 />
@@ -125,7 +138,7 @@ export default function ControlPanel({
                 Motor P (MW)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.p_mw}
                   onChange={(e) => onUpdateNode('p_mw', Number(e.target.value))}
                 />
@@ -157,7 +170,7 @@ export default function ControlPanel({
                 P (MW)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.p_mw}
                   onChange={(e) => onUpdateNode('p_mw', Number(e.target.value))}
                 />
@@ -178,7 +191,7 @@ export default function ControlPanel({
                 P (MW)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.p_mw}
                   onChange={(e) => onUpdateNode('p_mw', Number(e.target.value))}
                 />
@@ -209,7 +222,7 @@ export default function ControlPanel({
                 MVAsc (MVA)
                 <input
                   type="number"
-                  step="1"
+                  step="0.01"
                   value={selectedNode.data.mvasc}
                   onChange={(e) => onUpdateNode('mvasc', Number(e.target.value))}
                 />
@@ -230,7 +243,7 @@ export default function ControlPanel({
                 HV (kV)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.hv_kv}
                   onChange={(e) => onUpdateNode('hv_kv', Number(e.target.value))}
                 />
@@ -239,9 +252,28 @@ export default function ControlPanel({
                 LV (kV)
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.lv_kv}
                   onChange={(e) => onUpdateNode('lv_kv', Number(e.target.value))}
+                />
+              </label>
+              <label>
+                Rating (MVA)
+                <input
+                  type="number"
+                  step="0.01"
+                  value={selectedNode.data.mva_rating}
+                  onChange={(e) => onUpdateNode('mva_rating', Number(e.target.value))}
+                />
+              </label>
+              <label>
+                %Z
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={selectedNode.data.z_percent ?? 6}
+                  onChange={(e) => onUpdateNode('z_percent', Number(e.target.value))}
                 />
               </label>
               <label>
@@ -255,7 +287,7 @@ export default function ControlPanel({
                 X/R Ratio
                 <input
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={selectedNode.data.xr_ratio}
                   onChange={(e) => onUpdateNode('xr_ratio', Number(e.target.value))}
                 />

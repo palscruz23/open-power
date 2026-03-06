@@ -5,7 +5,7 @@ import LoadFlowStudyPage from './pages/LoadFlowStudyPage';
 const studyTabs = [
   { label: 'Load Flow', to: '/studies/load-flow' },
   { label: 'Short Circuit', to: '/studies/short-circuit' },
-  { label: 'Protection Coordination', to: '/studies/protection-coordination' }
+  { label: 'Protection Coordination (Future)', to: '/studies/protection-coordination' }
 ];
 
 function TopNavigation() {
