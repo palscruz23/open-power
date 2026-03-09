@@ -5,6 +5,8 @@
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
 - Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
+- Protection coordination now returns per-device summaries plus a top-level `curves` array; future charting and analysis work should extend that response instead of inventing a second protection-results shape.
+- Transformer protection curves currently choose the protected transformer side by comparing the configured pickup current against the transformer's rated HV/LV currents; keep that heuristic aligned with any future transformer-side settings.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -65,4 +67,22 @@
   - The frontend protection workflow currently validates inputs through `/api/calculate/protection-coordination` and returns accepted-device metadata only; future curve-generation work should extend that endpoint rather than inventing a second protection payload shape.
   - Because utilities are serialized through the existing `generators` payload list, backend validation has to treat `utility` protection attachments as generator-backed assets even though the frontend node type remains `utility`.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_protection` passed; load-flow, ANSI short-circuit, and protection-validation smoke executions via `.venv\\Scripts\\python.exe` passed; `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+---
+## [2026-03-09T14:59:08Z] - US-005 (runner)
+- Runner executed Codex session for US-005 - Model protection devices and settings for coordination studies
+- Exit code: 0
+- Files changed in working tree after run:
+  - ralph_loop.sh
+- Latest commit: a7b193b feat: [US-005] - [Model protection devices and settings for coordination studies]
+---
+## 2026-03-10 01:35:31 +10:30 - US-006
+- Replaced the protection-coordination placeholder with backend-generated time-current characteristic curve data derived from each device's configured settings, solved load-flow currents, and calculated three-phase fault current at the protected bus.
+- Updated the protection study workflow and results panel so the existing route runs coordination, returns curve metadata and point counts, and no longer labels protection coordination as future-only.
+- Added backend verification for a representative coordination scenario and for an actionable insufficient-fault-current validation failure.
+- Files changed: `backend/main.py`, `backend/test_protection.py`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/App.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Protection coordination should keep using the shared `/api/calculate/protection-coordination` endpoint; the backend now returns both normalized `devices` metadata and chart-ready `curves` data for each configured device.
+  - Curve generation depends on both solved load-flow currents and short-circuit fault current at the device bus, so backend smoke checks should continue covering load flow, short circuit, and protection together on the same representative network.
+  - Transformer-attached protection devices currently infer the protected side from pickup current versus transformer rated current; if the UI later adds explicit transformer-side selection, this backend heuristic will need to be replaced in both validation and curve generation.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; direct smoke execution of load-flow, ANSI short-circuit, and protection coordination via `.venv\\Scripts\\python.exe` passed; `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config.
 ---

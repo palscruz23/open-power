@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ONCE_SCRIPT="$ROOT_DIR/ralph_once.sh"
 PRD_FILE="$ROOT_DIR/prd.json"
-MAX_ITERATIONS=10
+MAX_ITERATIONS=3
 
 # Each successful loop iteration runs ralph_once.sh, which commits and pushes
 # the active PRD branch to origin.

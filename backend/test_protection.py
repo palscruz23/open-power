@@ -70,11 +70,17 @@ class ProtectionCoordinationTests(unittest.TestCase):
     def test_protection_coordination_accepts_structured_device_inputs(self):
         result = calculate_protection_coordination(self.make_payload())
 
-        self.assertEqual(result['status'], 'validated')
+        self.assertEqual(result['status'], 'completed')
         self.assertEqual(result['summary']['device_count'], 2)
+        self.assertEqual(result['summary']['curve_count'], 2)
         self.assertEqual(result['summary']['coordination_margin_s'], 0.3)
         self.assertEqual(result['devices'][0]['curve_family'], 'iec_standard_inverse')
         self.assertEqual(result['devices'][1]['asset_type'], 'transformer')
+        self.assertGreater(result['devices'][0]['max_fault_current_a'], result['devices'][0]['pickup_current_a'])
+        self.assertGreater(result['devices'][0]['curve_points_count'], 4)
+        self.assertEqual(result['curves'][0]['curve_family_label'], 'IEC Standard Inverse')
+        self.assertTrue(any(point['region'] == 'inverse' for point in result['curves'][0]['points']))
+        self.assertGreater(result['curves'][0]['points'][-1]['current_a'], result['curves'][0]['points'][0]['current_a'])
 
     def test_protection_coordination_rejects_missing_required_device_settings(self):
         with self.assertRaises(HTTPException) as context:
@@ -99,6 +105,32 @@ class ProtectionCoordinationTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('missing required settings', context.exception.detail)
+
+    def test_protection_coordination_rejects_insufficient_fault_current_range(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_protection_coordination(
+                self.make_payload(
+                    protection_devices=[
+                        {
+                            'asset_id': 'load-1',
+                            'asset_type': 'load',
+                            'device_type': 'oc_relay',
+                            'name': 'Overpicked Relay',
+                            'settings': {
+                                'phase_mode': 'phase',
+                                'curve_family': 'iec_standard_inverse',
+                                'pickup_current_a': 20000.0,
+                                'time_dial': 0.4,
+                                'instantaneous_pickup_a': None,
+                                'clearing_time_adder_s': 0.05
+                            }
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('available three-phase fault current', context.exception.detail)
 
 
 if __name__ == '__main__':

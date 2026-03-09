@@ -481,6 +481,320 @@ def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, o
     return validated_devices
 
 
+PROTECTION_CURVE_LIBRARY = {
+    'iec_standard_inverse': {
+        'label': 'IEC Standard Inverse',
+        'standard': 'IEC 60255'
+    },
+    'iec_very_inverse': {
+        'label': 'IEC Very Inverse',
+        'standard': 'IEC 60255'
+    },
+    'ansi_moderately_inverse': {
+        'label': 'ANSI Moderately Inverse',
+        'standard': 'ANSI/IEEE'
+    },
+    'ansi_very_inverse': {
+        'label': 'ANSI Very Inverse',
+        'standard': 'ANSI/IEEE'
+    },
+    'ansi_k': {
+        'label': 'ANSI K Fuse',
+        'standard': 'ANSI/IEEE'
+    }
+}
+
+
+def evaluate_protection_operating_time(curve_family: str, multiple: float, time_dial: float) -> float:
+    if multiple <= 1.0:
+        raise ValueError('Protection curve multiple must be greater than 1.0.')
+
+    if curve_family == 'iec_standard_inverse':
+        return time_dial * (0.14 / ((multiple**0.02) - 1.0))
+    if curve_family == 'iec_very_inverse':
+        return time_dial * (13.5 / (multiple - 1.0))
+    if curve_family == 'ansi_moderately_inverse':
+        return time_dial * ((0.0515 / ((multiple**0.02) - 1.0)) + 0.114)
+    if curve_family == 'ansi_very_inverse':
+        return time_dial * ((19.61 / ((multiple**2.0) - 1.0)) + 0.491)
+    if curve_family == 'ansi_k':
+        return time_dial * (5.95 / ((multiple**2.0) - 1.0))
+
+    raise HTTPException(
+        status_code=400,
+        detail=f'Protection curve family "{curve_family}" is not supported in this release.'
+    )
+
+
+def build_protection_load_flow_context(payload: ProtectionStudyInput) -> Dict[str, Dict[str, float]]:
+    net, bus_map = build_network(payload, use_motor_elements=False)
+    index_to_bus_id = {index: bus_id for bus_id, index in bus_map.items()}
+
+    try:
+        pp.runpp(net, max_iteration=500)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                'Protection coordination requires a solvable load-flow base case. '
+                f'Load flow failed: {exc}'
+            )
+        ) from exc
+
+    bus_voltage_kv = {
+        index_to_bus_id[bus_index]: round(float(row['vm_pu']) * float(net.bus.loc[bus_index, 'vn_kv']), 5)
+        for bus_index, row in net.res_bus.iterrows()
+        if bus_index in index_to_bus_id
+    }
+
+    load_current_a: Dict[str, float] = {}
+    if len(net.res_load) > 0:
+        for load_index, row in net.res_load.iterrows():
+            load_id = str(net.load.loc[load_index, 'name'])
+            bus_index = int(net.load.loc[load_index, 'bus'])
+            voltage_kv = bus_voltage_kv.get(index_to_bus_id.get(bus_index, ''), float(net.bus.loc[bus_index, 'vn_kv']))
+            if voltage_kv <= 0:
+                load_current_a[load_id] = 0.0
+                continue
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            apparent_mva = (p_mw**2 + q_mvar**2) ** 0.5
+            load_current_a[load_id] = round((apparent_mva / ((3**0.5) * voltage_kv)) * 1000.0, 5)
+
+    generator_current_a: Dict[str, float] = {}
+    if len(net.res_gen) > 0:
+        for gen_index, row in net.res_gen.iterrows():
+            generator_id = str(net.gen.loc[gen_index, 'name'])
+            bus_index = int(net.gen.loc[gen_index, 'bus'])
+            voltage_kv = bus_voltage_kv.get(index_to_bus_id.get(bus_index, ''), float(net.bus.loc[bus_index, 'vn_kv']))
+            if voltage_kv <= 0:
+                generator_current_a[generator_id] = 0.0
+                continue
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            apparent_mva = (p_mw**2 + q_mvar**2) ** 0.5
+            generator_current_a[generator_id] = round((apparent_mva / ((3**0.5) * voltage_kv)) * 1000.0, 5)
+
+    if len(net.res_ext_grid) > 0:
+        for ext_grid_index, row in net.res_ext_grid.iterrows():
+            generator_id = str(net.ext_grid.loc[ext_grid_index, 'name'])
+            bus_index = int(net.ext_grid.loc[ext_grid_index, 'bus'])
+            voltage_kv = bus_voltage_kv.get(index_to_bus_id.get(bus_index, ''), float(net.bus.loc[bus_index, 'vn_kv']))
+            if voltage_kv <= 0:
+                generator_current_a[generator_id] = 0.0
+                continue
+            p_mw = float(row['p_mw'])
+            q_mvar = float(row['q_mvar'])
+            apparent_mva = (p_mw**2 + q_mvar**2) ** 0.5
+            generator_current_a[generator_id] = round((apparent_mva / ((3**0.5) * voltage_kv)) * 1000.0, 5)
+
+    transformer_current_a: Dict[str, Dict[str, float]] = {}
+    if len(net.res_trafo) > 0:
+        for trafo_index, row in net.res_trafo.iterrows():
+            transformer_id = str(net.trafo.loc[trafo_index, 'name'])
+            transformer_current_a[transformer_id] = {
+                'hv_current_a': round(float(row['i_hv_ka']) * 1000.0, 5),
+                'lv_current_a': round(float(row['i_lv_ka']) * 1000.0, 5)
+            }
+
+    return {
+        'bus_voltage_kv': bus_voltage_kv,
+        'load_current_a': load_current_a,
+        'generator_current_a': generator_current_a,
+        'transformer_current_a': transformer_current_a
+    }
+
+
+def calculate_bus_fault_current_a(payload: ProtectionStudyInput, bus_id: str) -> float:
+    if sc is None:
+        raise HTTPException(status_code=503, detail='pandapower short-circuit module unavailable.')
+
+    net, bus_map = build_network(payload, use_motor_elements=True)
+    if bus_id not in bus_map:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Protection coordination device references unknown bus "{bus_id}".'
+        )
+
+    try:
+        sc.calc_sc(net, case='max', bus=bus_map[bus_id], fault='3ph', branch_results=False, ip=True, ith=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection coordination could not calculate fault current at bus "{bus_id}". '
+                f'Check source and impedance data. Short circuit failed: {exc}'
+            )
+        ) from exc
+
+    if bus_map[bus_id] not in net.res_bus_sc.index:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection coordination did not return a fault current for bus "{bus_id}". '
+                'Check that the protected asset is connected to an energized bus.'
+            )
+        )
+
+    current_ka = net.res_bus_sc.loc[bus_map[bus_id]].get('ikss_ka')
+    if current_ka is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection coordination did not return an initial symmetrical current for bus "{bus_id}". '
+                'Check that the protected asset is connected to an energized bus.'
+            )
+        )
+
+    current_a = float(current_ka) * 1000.0
+    if not math.isfinite(current_a) or current_a <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection coordination found no usable fault current at bus "{bus_id}". '
+                'Check source connection and device placement.'
+            )
+        )
+
+    return round(current_a, 5)
+
+
+def build_protection_asset_context(
+    payload: ProtectionStudyInput,
+    validated_device: Dict[str, object],
+    load_flow_context: Dict[str, Dict[str, float]]
+) -> Dict[str, object]:
+    load_by_id = {load.id: load for load in payload.loads}
+    generator_by_id = {generator.id: generator for generator in payload.generators}
+    transformer_by_id = {transformer.id: transformer for transformer in payload.transformers}
+    bus_voltage_kv = load_flow_context['bus_voltage_kv']
+
+    asset_id = str(validated_device['asset_id'])
+    asset_type = str(validated_device['asset_type'])
+    pickup_current_a = float(validated_device['pickup_current_a'])
+
+    if asset_type in {'load', 'resistive_load'}:
+        load = load_by_id[asset_id]
+        return {
+            'bus_id': load.bus,
+            'bus_role': 'load_bus',
+            'bus_voltage_kv': bus_voltage_kv.get(load.bus, 0.0),
+            'load_current_a': float(load_flow_context['load_current_a'].get(asset_id, 0.0))
+        }
+
+    if asset_type in {'generator', 'utility'}:
+        generator = generator_by_id[asset_id]
+        return {
+            'bus_id': generator.bus,
+            'bus_role': 'source_bus',
+            'bus_voltage_kv': bus_voltage_kv.get(generator.bus, 0.0),
+            'load_current_a': float(load_flow_context['generator_current_a'].get(asset_id, 0.0))
+        }
+
+    if asset_type == 'transformer':
+        transformer = transformer_by_id[asset_id]
+        hv_current_a = (transformer.sn_mva * 1000.0) / ((3**0.5) * transformer.vn_hv_kv)
+        lv_current_a = (transformer.sn_mva * 1000.0) / ((3**0.5) * transformer.vn_lv_kv)
+        hv_error = abs(hv_current_a - pickup_current_a)
+        lv_error = abs(lv_current_a - pickup_current_a)
+        use_hv_side = hv_error <= lv_error
+        result_currents = load_flow_context['transformer_current_a'].get(asset_id, {})
+        return {
+            'bus_id': transformer.hv_bus if use_hv_side else transformer.lv_bus,
+            'bus_role': 'transformer_hv_bus' if use_hv_side else 'transformer_lv_bus',
+            'bus_voltage_kv': bus_voltage_kv.get(transformer.hv_bus if use_hv_side else transformer.lv_bus, 0.0),
+            'load_current_a': float(
+                result_currents.get('hv_current_a' if use_hv_side else 'lv_current_a', 0.0)
+            )
+        }
+
+    raise HTTPException(
+        status_code=400,
+        detail=f'Protection device "{validated_device["name"]}" has unsupported asset type "{asset_type}".'
+    )
+
+
+def generate_protection_curve_points(
+    validated_device: Dict[str, object],
+    load_current_a: float,
+    max_fault_current_a: float
+) -> List[Dict[str, object]]:
+    pickup_current_a = float(validated_device['pickup_current_a'])
+    time_dial = float(validated_device['time_dial'])
+    clearing_time_adder_s = float(validated_device['clearing_time_adder_s'])
+    instantaneous_pickup_a = validated_device.get('instantaneous_pickup_a')
+    instantaneous_pickup_a = float(instantaneous_pickup_a) if instantaneous_pickup_a is not None else None
+
+    if max_fault_current_a <= pickup_current_a:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection device "{validated_device["name"]}" has pickup current {round(pickup_current_a, 3)} A '
+                f'but only {round(max_fault_current_a, 3)} A of available three-phase fault current at its bus. '
+                'Lower the pickup or increase available source fault level before running coordination.'
+            )
+        )
+
+    inverse_region_floor_a = max(pickup_current_a * 1.05, min(max(load_current_a * 1.25, pickup_current_a * 1.05), max_fault_current_a))
+    inverse_region_ceiling_a = max_fault_current_a
+    if instantaneous_pickup_a is not None:
+        inverse_region_ceiling_a = min(inverse_region_ceiling_a, instantaneous_pickup_a * 0.98)
+
+    points: List[Dict[str, object]] = []
+    if inverse_region_ceiling_a > inverse_region_floor_a:
+        point_count = 18
+        log_min = math.log10(inverse_region_floor_a)
+        log_max = math.log10(inverse_region_ceiling_a)
+        for index in range(point_count):
+            current_a = 10 ** (log_min + ((log_max - log_min) * index / (point_count - 1)))
+            multiple = current_a / pickup_current_a
+            if multiple <= 1.0:
+                continue
+            operating_time_s = evaluate_protection_operating_time(
+                str(validated_device['curve_family']),
+                multiple,
+                time_dial
+            ) + clearing_time_adder_s
+            points.append(
+                {
+                    'current_a': round(current_a, 5),
+                    'current_ka': round(current_a / 1000.0, 5),
+                    'time_s': round(operating_time_s, 5),
+                    'region': 'inverse'
+                }
+            )
+
+    if instantaneous_pickup_a is not None and max_fault_current_a >= instantaneous_pickup_a:
+        instantaneous_time_s = clearing_time_adder_s + (0.03 if validated_device['device_type'] == 'fuse' else 0.05)
+        points.extend(
+            [
+                {
+                    'current_a': round(instantaneous_pickup_a, 5),
+                    'current_ka': round(instantaneous_pickup_a / 1000.0, 5),
+                    'time_s': round(instantaneous_time_s, 5),
+                    'region': 'instantaneous'
+                },
+                {
+                    'current_a': round(max_fault_current_a, 5),
+                    'current_ka': round(max_fault_current_a / 1000.0, 5),
+                    'time_s': round(instantaneous_time_s, 5),
+                    'region': 'instantaneous'
+                }
+            ]
+        )
+
+    if not points:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection device "{validated_device["name"]}" has no usable current range between pickup '
+                'and available fault current for a coordination curve. Check pickup, instantaneous, and source data.'
+            )
+        )
+
+    return sorted(points, key=lambda point: (point['current_a'], point['time_s']))
+
+
 @app.post('/api/calculate/load-flow')
 def calculate_load_flow(payload: NetworkInput):
     net, bus_map = build_network(payload, use_motor_elements=False)
@@ -786,15 +1100,74 @@ def calculate_short_circuit(payload: ShortCircuitInput):
 @app.post('/api/calculate/protection-coordination')
 def calculate_protection_coordination(payload: ProtectionStudyInput):
     validated_devices = validate_protection_study(payload)
+    load_flow_context = build_protection_load_flow_context(payload)
+    fault_current_cache: Dict[str, float] = {}
+    devices: List[Dict[str, object]] = []
+    curves: List[Dict[str, object]] = []
+
+    for validated_device in validated_devices:
+        asset_context = build_protection_asset_context(payload, validated_device, load_flow_context)
+        bus_id = str(asset_context['bus_id'])
+        if bus_id not in fault_current_cache:
+            fault_current_cache[bus_id] = calculate_bus_fault_current_a(payload, bus_id)
+
+        max_fault_current_a = fault_current_cache[bus_id]
+        load_current_a = float(asset_context['load_current_a'])
+        curve_points = generate_protection_curve_points(
+            validated_device,
+            load_current_a=load_current_a,
+            max_fault_current_a=max_fault_current_a
+        )
+        curve_meta = PROTECTION_CURVE_LIBRARY[str(validated_device['curve_family'])]
+
+        devices.append(
+            {
+                **validated_device,
+                'bus_id': bus_id,
+                'bus_role': asset_context['bus_role'],
+                'bus_voltage_kv': round(float(asset_context['bus_voltage_kv']), 5),
+                'load_current_a': round(load_current_a, 5),
+                'max_fault_current_a': round(max_fault_current_a, 5),
+                'curve_points_count': len(curve_points)
+            }
+        )
+        curves.append(
+            {
+                'device_id': str(validated_device['asset_id']),
+                'device_name': str(validated_device['name']),
+                'asset_id': str(validated_device['asset_id']),
+                'asset_type': str(validated_device['asset_type']),
+                'device_type': str(validated_device['device_type']),
+                'bus_id': bus_id,
+                'bus_role': asset_context['bus_role'],
+                'bus_voltage_kv': round(float(asset_context['bus_voltage_kv']), 5),
+                'phase_mode': str(validated_device['phase_mode']),
+                'curve_family': str(validated_device['curve_family']),
+                'curve_family_label': curve_meta['label'],
+                'curve_standard': curve_meta['standard'],
+                'pickup_current_a': float(validated_device['pickup_current_a']),
+                'time_dial': float(validated_device['time_dial']),
+                'instantaneous_pickup_a': validated_device['instantaneous_pickup_a'],
+                'clearing_time_adder_s': float(validated_device['clearing_time_adder_s']),
+                'load_current_a': round(load_current_a, 5),
+                'max_fault_current_a': round(max_fault_current_a, 5),
+                'points': curve_points
+            }
+        )
 
     return {
-        'status': 'validated',
+        'status': 'completed',
         'message': (
-            'Protection device inputs are valid. Coordination curve generation is not implemented in this release.'
+            f'Generated time-current characteristic curves for {len(curves)} configured protection device(s).'
         ),
         'summary': {
             'device_count': len(validated_devices),
-            'coordination_margin_s': round(float(payload.coordination_margin_s), 5)
+            'curve_count': len(curves),
+            'coordination_margin_s': round(float(payload.coordination_margin_s), 5),
+            'bus_fault_levels': {
+                bus_id: round(current_a, 5) for bus_id, current_a in fault_current_cache.items()
+            }
         },
-        'devices': validated_devices
+        'devices': devices,
+        'curves': curves
     }

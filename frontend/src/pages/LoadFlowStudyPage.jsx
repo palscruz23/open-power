@@ -632,7 +632,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         setResult(null);
         const payload = mapToPayload();
         if (studyType === 'protection' && payload.protection_devices.length === 0) {
-          setError('Attach at least one protection device before validating protection coordination inputs.');
+          setError('Attach at least one protection device before running protection coordination.');
           return;
         }
 

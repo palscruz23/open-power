@@ -146,11 +146,12 @@ function renderShortCircuitResults(result) {
 
 function renderProtectionResults(result) {
   const devices = Array.isArray(result?.devices) ? result.devices : [];
+  const curves = Array.isArray(result?.curves) ? result.curves : [];
 
   return (
     <div className="study-result study-result--protection">
-      <h4>Protection Setup Validation</h4>
-      <p className="result-note">{result?.message || 'Protection inputs were validated.'}</p>
+      <h4>Protection Coordination Results</h4>
+      <p className="result-note">{result?.message || 'Protection coordination completed.'}</p>
       <div className="result-summary-grid">
         <div>
           <span>Status</span>
@@ -161,12 +162,16 @@ function renderProtectionResults(result) {
           <strong>{result?.summary?.device_count ?? devices.length}</strong>
         </div>
         <div>
+          <span>Generated Curves</span>
+          <strong>{result?.summary?.curve_count ?? curves.length}</strong>
+        </div>
+        <div>
           <span>Coordination Margin</span>
           <strong>{result?.summary?.coordination_margin_s ?? '-'} s</strong>
         </div>
       </div>
       <div className="result-section">
-        <h5>Accepted Devices</h5>
+        <h5>Device Curve Inputs</h5>
         {devices.length > 0 ? (
           <div className="result-list">
             {devices.map((device) => (
@@ -174,17 +179,45 @@ function renderProtectionResults(result) {
                 <div>
                   <strong>{device.name}</strong>
                   <span>
-                    {device.device_type} on {device.asset_id} ({device.curve_family})
+                    {device.device_type} on {device.asset_id} at {device.bus_id} ({device.curve_family})
                   </span>
                 </div>
                 <div>
-                  {device.pickup_current_a} A / TD {device.time_dial}
+                  {device.pickup_current_a} A pickup / {device.max_fault_current_a} A fault / {device.curve_points_count} pts
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <p className="result-empty">No protection devices were accepted.</p>
+        )}
+      </div>
+      <div className="result-section">
+        <h5>Generated Curves</h5>
+        {curves.length > 0 ? (
+          <div className="result-list">
+            {curves.map((curve) => {
+              const firstPoint = curve.points?.[0];
+              const lastPoint = curve.points?.[curve.points.length - 1];
+              return (
+                <div className="result-list-row" key={`${curve.device_id}-${curve.device_name}`}>
+                  <div>
+                    <strong>{curve.device_name}</strong>
+                    <span>
+                      {curve.curve_family_label} on {curve.bus_id}
+                    </span>
+                  </div>
+                  <div>
+                    {firstPoint && lastPoint
+                      ? `${firstPoint.current_a.toFixed(0)}-${lastPoint.current_a.toFixed(0)} A`
+                      : 'No points'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="result-empty">No time-current curve data was returned for this study.</p>
         )}
       </div>
     </div>
@@ -251,7 +284,7 @@ export default function ControlPanel({
       <div className="buttons">
         {isLoadFlow && <button onClick={onRunLoadFlow}>Run Load Flow</button>}
         {isShortCircuit && <button onClick={onRunShortCircuit}>Run Short Circuit</button>}
-        {isProtection && <button onClick={onRunProtection}>Validate Protection Setup</button>}
+        {isProtection && <button onClick={onRunProtection}>Run Protection Coordination</button>}
       </div>
 
       {isShortCircuit && (
@@ -313,8 +346,8 @@ export default function ControlPanel({
         <div className="editor">
           <h4>Protection Setup</h4>
           <p>
-            Attach relays, reclosers, or fuses to loads, sources, and transformers, then validate the
-            structured settings before coordination curves are added in a later study step.
+            Attach relays, reclosers, or fuses to loads, sources, and transformers, then run the
+            coordination study to generate time-current curve data from the drawn network.
           </p>
           <p>Configured devices: {protectionDeviceCount}</p>
         </div>

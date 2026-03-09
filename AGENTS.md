@@ -18,9 +18,7 @@ Main parts:
 Primary supported studies today:
 - Load flow
 - Short circuit
-
-Protection coordination appears in the UI as future work and should stay
-clearly incomplete unless implemented end-to-end.
+- Protection coordination curve generation
 
 ## 2. Technology Stack
 
@@ -85,6 +83,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - persistence sanitization
 - Short-circuit canvas annotation context should stay in transient node fields only; if you add fault metadata for display, update both `sanitizeGraphForPersistence()` and the short-circuit/load-flow reset paths so saved diagrams do not retain study results.
 - Protection-device inputs live under each node's persistent `data.protection` object on protection-eligible assets; if you change the protection model, update both the `ControlPanel.jsx` editor and `LoadFlowStudyPage.jsx` payload mapping together so backend validation receives the same structured fields the UI edits.
+- Protection coordination responses now return validated device summaries plus a top-level `curves` array; keep future protection analysis and charting work aligned to that response shape instead of inventing a parallel payload.
 
 When changing backend network models or result payloads, update the frontend
 call sites and renderers in the same task.
@@ -133,6 +132,10 @@ Rules:
 Transformer, generator, and short-circuit changes usually require coordinated
 frontend and backend updates. Do not change only one side unless the task is
 strictly internal.
+
+Protection coordination notes:
+- The backend derives TCC points from device settings plus calculated load-flow and short-circuit currents; avoid replacing those values with frontend-only demo data.
+- Transformer-attached protection devices currently infer the protected side by comparing the configured pickup current against the transformer's rated HV and LV currents; keep that heuristic in mind if you extend transformer protection inputs.
 
 ## 7. Workflow Files
 

@@ -93,7 +93,7 @@
         "Backend verification passes for at least one representative coordination scenario"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": "This task focuses on producing valid curve data, not only placeholder UI."
     },
     {
