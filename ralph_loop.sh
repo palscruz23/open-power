@@ -6,6 +6,9 @@ ONCE_SCRIPT="$ROOT_DIR/ralph_once.sh"
 PRD_FILE="$ROOT_DIR/prd.json"
 MAX_ITERATIONS=10
 
+# Each successful loop iteration runs ralph_once.sh, which commits and pushes
+# the active PRD branch to origin.
+
 require_file() {
   local f="$1"
   if [[ ! -f "$f" ]]; then
@@ -43,7 +46,7 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
 
   echo "=== Ralph Loop Iteration $iteration/$MAX_ITERATIONS (remaining tasks: $remaining) ==="
   bash "$ONCE_SCRIPT"
-  echo "=== Iteration $iteration complete ==="
+  echo "=== Iteration $iteration complete and pushed ==="
 
   remaining_after="$(remaining_tasks)"
   if [[ "$remaining_after" -eq 0 ]]; then

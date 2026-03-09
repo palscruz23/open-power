@@ -137,4 +137,7 @@ if [[ $codex_exit -ne 0 ]]; then
   exit "$codex_exit"
 fi
 
+echo "Pushing branch $branch_name to origin"
+git -C "$ROOT_DIR" push -u origin "$branch_name"
+
 echo "Completed session for $task_id"

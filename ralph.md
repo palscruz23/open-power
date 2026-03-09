@@ -14,6 +14,7 @@ You are an autonomous coding agent working on a software project.
 8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
 9. Update the PRD to set `passes: true` for the completed story
 10. Append your progress to `progress.txt`
+11. When the run succeeds, the `ralph_once.sh` runner will push the current PRD branch to `origin`
 
 ## Progress Report Format
 
