@@ -8,6 +8,7 @@
 - Protection coordination now returns per-device summaries plus a top-level `curves` array; future charting and analysis work should extend that response instead of inventing a second protection-results shape.
 - Transformer protection curves currently choose the protected transformer side by comparing the configured pickup current against the transformer's rated HV/LV currents; keep that heuristic aligned with any future transformer-side settings.
 - Protection coordination charting lives in `frontend/src/components/ControlPanel.jsx` as a native SVG view driven directly by the backend `curves` array; keep loading/error/content state there and avoid adding a second frontend-only curve model.
+- Protection coordination feedback should extend the backend `analysis` block (`warning_count`, `warnings`, `scope_notes`) so warnings and out-of-scope notes stay separate from chart data and device summaries.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -101,5 +102,22 @@
 - **Learnings for future iterations:**
   - Protection coordination result-state handling now lives with the chart renderer in `frontend/src/components/ControlPanel.jsx`; keep the protection panel stateful there instead of falling back to the generic `error`/`result` rendering path.
   - `frontend/src/pages/LoadFlowStudyPage.jsx` owns the request lifecycle for all studies, so frontend loading states should be added there and passed into the relevant result surface rather than inferred from `result === null`.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+---
+## [2026-03-09T15:13:00Z] - US-007 (runner)
+- Runner executed Codex session for US-007 - Render interactive protection coordination curves in the frontend
+- Exit code: 0
+- Files changed in working tree after run:
+  - none
+- Latest commit: bb75d6e feat: [US-007] - [Render interactive protection coordination curves in the frontend]
+---
+## 2026-03-10 07:22:36 +10:30 - US-008
+- Added backend protection coordination analysis that compares generated TCC curves over shared current ranges and returns explicit overlap or ordering warnings plus out-of-scope notes under a dedicated `analysis` response block.
+- Updated the protection coordination results panel to show warning feedback separately from the chart and device inputs, including warning counts, affected segments, minimum time gaps, and explicit out-of-scope messaging.
+- Added backend verification for the new analysis payload and a tight-spacing warning scenario.
+- Files changed: `backend/main.py`, `backend/test_protection.py`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Protection coordination warnings should be derived from the generated `curves` data and returned through `result.analysis`; that keeps review feedback and chart rendering on the same source of truth.
+  - The control-panel protection results surface is the right place to separate warnings from raw curve data; keep analysis feedback there instead of folding it into the chart legend or generic error area.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
 ---

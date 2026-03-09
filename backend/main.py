@@ -795,6 +795,228 @@ def generate_protection_curve_points(
     return sorted(points, key=lambda point: (point['current_a'], point['time_s']))
 
 
+def normalize_curve_points_for_analysis(curve: Dict[str, object]) -> List[Dict[str, float]]:
+    current_to_time: Dict[float, float] = {}
+    for point in curve.get('points', []):
+        current_a = point.get('current_a')
+        time_s = point.get('time_s')
+        try:
+            current_value = float(current_a)
+            time_value = float(time_s)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(current_value) or not math.isfinite(time_value):
+            continue
+        if current_value <= 0 or time_value <= 0:
+            continue
+        existing_time = current_to_time.get(current_value)
+        current_to_time[current_value] = min(existing_time, time_value) if existing_time is not None else time_value
+
+    return [
+        {'current_a': current_a, 'time_s': current_to_time[current_a]}
+        for current_a in sorted(current_to_time.keys())
+    ]
+
+
+def interpolate_curve_time(points: List[Dict[str, float]], current_a: float) -> float | None:
+    if len(points) == 0 or current_a <= 0:
+        return None
+
+    if current_a < points[0]['current_a'] or current_a > points[-1]['current_a']:
+        return None
+
+    for point in points:
+        if math.isclose(point['current_a'], current_a, rel_tol=1e-9, abs_tol=1e-9):
+            return point['time_s']
+
+    for index in range(len(points) - 1):
+        left = points[index]
+        right = points[index + 1]
+        left_current = left['current_a']
+        right_current = right['current_a']
+        if left_current >= right_current:
+            continue
+        if left_current <= current_a <= right_current:
+            left_time = left['time_s']
+            right_time = right['time_s']
+            log_span = math.log10(right_current) - math.log10(left_current)
+            if math.isclose(log_span, 0.0, abs_tol=1e-12):
+                return min(left_time, right_time)
+            position = (math.log10(current_a) - math.log10(left_current)) / log_span
+            return 10 ** (math.log10(left_time) + (math.log10(right_time) - math.log10(left_time)) * position)
+
+    return None
+
+
+def build_coordination_segment_label(curve_a: Dict[str, object], curve_b: Dict[str, object]) -> str:
+    bus_a = str(curve_a.get('bus_id') or '?')
+    bus_b = str(curve_b.get('bus_id') or '?')
+    role_a = str(curve_a.get('bus_role') or 'device')
+    role_b = str(curve_b.get('bus_role') or 'device')
+
+    if bus_a == bus_b:
+        return f'shared bus {bus_a}'
+
+    return f'{bus_a} ({role_a}) to {bus_b} ({role_b})'
+
+
+def analyze_protection_coordination(
+    curves: List[Dict[str, object]],
+    coordination_margin_s: float
+) -> Dict[str, object]:
+    warnings: List[Dict[str, object]] = []
+    rounded_margin_s = round(float(coordination_margin_s), 5)
+
+    for left_index in range(len(curves)):
+        left_curve = curves[left_index]
+        left_points = normalize_curve_points_for_analysis(left_curve)
+        if len(left_points) < 2:
+            continue
+
+        for right_index in range(left_index + 1, len(curves)):
+            right_curve = curves[right_index]
+            right_points = normalize_curve_points_for_analysis(right_curve)
+            if len(right_points) < 2:
+                continue
+
+            overlap_start_a = max(left_points[0]['current_a'], right_points[0]['current_a'])
+            overlap_end_a = min(left_points[-1]['current_a'], right_points[-1]['current_a'])
+            if overlap_end_a <= overlap_start_a:
+                continue
+
+            sample_currents = {
+                overlap_start_a,
+                overlap_end_a
+            }
+            for points in (left_points, right_points):
+                for point in points:
+                    current_a = point['current_a']
+                    if overlap_start_a <= current_a <= overlap_end_a:
+                        sample_currents.add(current_a)
+
+            if overlap_start_a > 0 and overlap_end_a > overlap_start_a:
+                sample_count = 7
+                log_start = math.log10(overlap_start_a)
+                log_end = math.log10(overlap_end_a)
+                for sample_index in range(sample_count):
+                    sample_currents.add(
+                        10 ** (log_start + ((log_end - log_start) * sample_index / (sample_count - 1)))
+                    )
+
+            evaluated_samples: List[Dict[str, float]] = []
+            for current_a in sorted(sample_currents):
+                left_time = interpolate_curve_time(left_points, current_a)
+                right_time = interpolate_curve_time(right_points, current_a)
+                if left_time is None or right_time is None:
+                    continue
+                evaluated_samples.append(
+                    {
+                        'current_a': current_a,
+                        'left_time_s': left_time,
+                        'right_time_s': right_time,
+                        'time_gap_s': abs(left_time - right_time),
+                        'ordering_sign': left_time - right_time
+                    }
+                )
+
+            if len(evaluated_samples) < 2:
+                continue
+
+            device_names = [str(left_curve.get('device_name') or left_curve.get('asset_id') or 'Device A'),
+                            str(right_curve.get('device_name') or right_curve.get('asset_id') or 'Device B')]
+            segment_label = build_coordination_segment_label(left_curve, right_curve)
+            ordering_warning = None
+            minimum_gap_sample = min(evaluated_samples, key=lambda sample: sample['time_gap_s'])
+
+            for sample_index in range(len(evaluated_samples) - 1):
+                current_sample = evaluated_samples[sample_index]
+                next_sample = evaluated_samples[sample_index + 1]
+                current_sign = current_sample['ordering_sign']
+                next_sign = next_sample['ordering_sign']
+                if math.isclose(current_sign, 0.0, abs_tol=1e-9) or math.isclose(next_sign, 0.0, abs_tol=1e-9):
+                    ordering_warning = {
+                        'type': 'ordering',
+                        'severity': 'warning',
+                        'device_names': device_names,
+                        'device_ids': [
+                            str(left_curve.get('device_id') or left_curve.get('asset_id') or ''),
+                            str(right_curve.get('device_id') or right_curve.get('asset_id') or '')
+                        ],
+                        'segment_label': segment_label,
+                        'current_window_a': {
+                            'from': round(current_sample['current_a'], 5),
+                            'to': round(next_sample['current_a'], 5)
+                        },
+                        'minimum_time_gap_s': round(min(current_sample['time_gap_s'], next_sample['time_gap_s']), 5),
+                        'message': (
+                            f'{device_names[0]} and {device_names[1]} change operating order around '
+                            f'{segment_label}. Their curves meet or cross between '
+                            f'{round(current_sample["current_a"], 3)} A and {round(next_sample["current_a"], 3)} A.'
+                        )
+                    }
+                    break
+                if current_sign * next_sign < 0:
+                    ordering_warning = {
+                        'type': 'ordering',
+                        'severity': 'warning',
+                        'device_names': device_names,
+                        'device_ids': [
+                            str(left_curve.get('device_id') or left_curve.get('asset_id') or ''),
+                            str(right_curve.get('device_id') or right_curve.get('asset_id') or '')
+                        ],
+                        'segment_label': segment_label,
+                        'current_window_a': {
+                            'from': round(current_sample['current_a'], 5),
+                            'to': round(next_sample['current_a'], 5)
+                        },
+                        'minimum_time_gap_s': round(min(current_sample['time_gap_s'], next_sample['time_gap_s']), 5),
+                        'message': (
+                            f'{device_names[0]} and {device_names[1]} reverse operating order over '
+                            f'{segment_label}. Review the crossover between '
+                            f'{round(current_sample["current_a"], 3)} A and {round(next_sample["current_a"], 3)} A.'
+                        )
+                    }
+                    break
+
+            if ordering_warning is not None:
+                warnings.append(ordering_warning)
+                continue
+
+            if minimum_gap_sample['time_gap_s'] < coordination_margin_s:
+                warnings.append(
+                    {
+                        'type': 'overlap',
+                        'severity': 'warning',
+                        'device_names': device_names,
+                        'device_ids': [
+                            str(left_curve.get('device_id') or left_curve.get('asset_id') or ''),
+                            str(right_curve.get('device_id') or right_curve.get('asset_id') or '')
+                        ],
+                        'segment_label': segment_label,
+                        'current_window_a': {
+                            'from': round(overlap_start_a, 5),
+                            'to': round(overlap_end_a, 5)
+                        },
+                        'minimum_time_gap_s': round(minimum_gap_sample['time_gap_s'], 5),
+                        'message': (
+                            f'{device_names[0]} and {device_names[1]} stay within '
+                            f'{rounded_margin_s} s of each other over {segment_label}. '
+                            f'The tightest gap is {round(minimum_gap_sample["time_gap_s"], 3)} s near '
+                            f'{round(minimum_gap_sample["current_a"], 3)} A.'
+                        )
+                    }
+                )
+
+    return {
+        'warning_count': len(warnings),
+        'warnings': warnings,
+        'scope_notes': [
+            'Automatic grading checks in this release are limited to curve overlap and ordering warnings from the generated TCC data.',
+            'Advanced coordination checks such as full feeder selectivity, directional elements, fuse damage curves, and CT or relay tolerance studies are out of scope.'
+        ]
+    }
+
+
 @app.post('/api/calculate/load-flow')
 def calculate_load_flow(payload: NetworkInput):
     net, bus_map = build_network(payload, use_motor_elements=False)
@@ -1155,6 +1377,8 @@ def calculate_protection_coordination(payload: ProtectionStudyInput):
             }
         )
 
+    analysis = analyze_protection_coordination(curves, float(payload.coordination_margin_s))
+
     return {
         'status': 'completed',
         'message': (
@@ -1169,5 +1393,6 @@ def calculate_protection_coordination(payload: ProtectionStudyInput):
             }
         },
         'devices': devices,
-        'curves': curves
+        'curves': curves,
+        'analysis': analysis
     }

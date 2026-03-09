@@ -74,6 +74,9 @@ class ProtectionCoordinationTests(unittest.TestCase):
         self.assertEqual(result['summary']['device_count'], 2)
         self.assertEqual(result['summary']['curve_count'], 2)
         self.assertEqual(result['summary']['coordination_margin_s'], 0.3)
+        self.assertIn('analysis', result)
+        self.assertIn('warnings', result['analysis'])
+        self.assertIn('scope_notes', result['analysis'])
         self.assertEqual(result['devices'][0]['curve_family'], 'iec_standard_inverse')
         self.assertEqual(result['devices'][1]['asset_type'], 'transformer')
         self.assertGreater(result['devices'][0]['max_fault_current_a'], result['devices'][0]['pickup_current_a'])
@@ -81,6 +84,54 @@ class ProtectionCoordinationTests(unittest.TestCase):
         self.assertEqual(result['curves'][0]['curve_family_label'], 'IEC Standard Inverse')
         self.assertTrue(any(point['region'] == 'inverse' for point in result['curves'][0]['points']))
         self.assertGreater(result['curves'][0]['points'][-1]['current_a'], result['curves'][0]['points'][0]['current_a'])
+        self.assertTrue(
+            any('out of scope' in note.lower() for note in result['analysis']['scope_notes'])
+        )
+
+    def test_protection_coordination_reports_overlap_warnings_for_tight_curve_spacing(self):
+        result = calculate_protection_coordination(
+            self.make_payload(
+                protection_devices=[
+                    {
+                        'asset_id': 'load-1',
+                        'asset_type': 'load',
+                        'device_type': 'oc_relay',
+                        'name': 'Motor Relay A',
+                        'settings': {
+                            'phase_mode': 'phase',
+                            'curve_family': 'iec_standard_inverse',
+                            'pickup_current_a': 180.0,
+                            'time_dial': 0.4,
+                            'instantaneous_pickup_a': 600.0,
+                            'clearing_time_adder_s': 0.05
+                        }
+                    },
+                    {
+                        'asset_id': 'load-1',
+                        'asset_type': 'load',
+                        'device_type': 'oc_relay',
+                        'name': 'Motor Relay B',
+                        'settings': {
+                            'phase_mode': 'phase',
+                            'curve_family': 'iec_standard_inverse',
+                            'pickup_current_a': 185.0,
+                            'time_dial': 0.42,
+                            'instantaneous_pickup_a': 620.0,
+                            'clearing_time_adder_s': 0.05
+                        }
+                    }
+                ]
+            )
+        )
+
+        self.assertGreaterEqual(result['analysis']['warning_count'], 1)
+        first_warning = result['analysis']['warnings'][0]
+        self.assertIn(first_warning['type'], {'overlap', 'ordering'})
+        self.assertIn('Motor Relay A', first_warning['message'])
+        self.assertIn('Motor Relay B', first_warning['message'])
+        self.assertEqual(first_warning['segment_label'], 'shared bus bus-2')
+        self.assertIn('from', first_warning['current_window_a'])
+        self.assertIn('to', first_warning['current_window_a'])
 
     def test_protection_coordination_rejects_missing_required_device_settings(self):
         with self.assertRaises(HTTPException) as context:

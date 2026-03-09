@@ -634,6 +634,30 @@ pre {
   color: #526173;
 }
 
+.result-list-row--warning {
+  border-color: #f2c98a;
+  background: linear-gradient(135deg, #fffaf2 0%, #fff4df 100%);
+}
+
+.result-list-row--warning strong {
+  color: #8a4b00;
+}
+
+.result-scope-notes {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.result-scope-notes strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  color: #213042;
+}
+
 .result-limitations {
   margin: 0;
   padding-left: 1.1rem;

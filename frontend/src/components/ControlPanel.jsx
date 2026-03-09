@@ -478,6 +478,8 @@ function renderShortCircuitResults(result) {
 function renderProtectionResults(result, error, isLoading) {
   const devices = Array.isArray(result?.devices) ? result.devices : [];
   const curves = Array.isArray(result?.curves) ? result.curves : [];
+  const analysisWarnings = Array.isArray(result?.analysis?.warnings) ? result.analysis.warnings : [];
+  const scopeNotes = Array.isArray(result?.analysis?.scope_notes) ? result.analysis.scope_notes : [];
 
   if (isLoading) {
     return (
@@ -536,6 +538,52 @@ function renderProtectionResults(result, error, isLoading) {
           <span>Coordination Margin</span>
           <strong>{result?.summary?.coordination_margin_s ?? '-'} s</strong>
         </div>
+        <div>
+          <span>Warnings</span>
+          <strong>{result?.analysis?.warning_count ?? analysisWarnings.length}</strong>
+        </div>
+      </div>
+      <div className="result-section">
+        <h5>Analysis Feedback</h5>
+        {analysisWarnings.length > 0 ? (
+          <div className="result-list">
+            {analysisWarnings.map((warning, index) => {
+              const currentWindow = warning?.current_window_a;
+              const currentRange =
+                Number.isFinite(Number(currentWindow?.from)) && Number.isFinite(Number(currentWindow?.to))
+                  ? `${formatProtectionCurrent(Number(currentWindow.from))} to ${formatProtectionCurrent(Number(currentWindow.to))}`
+                  : 'Current range unavailable';
+              return (
+                <div className="result-list-row result-list-row--warning" key={`${warning.type}-${index}`}>
+                  <div>
+                    <strong>{warning?.segment_label || 'Coordination review required'}</strong>
+                    <span>{warning?.message || 'Potential coordination issue detected.'}</span>
+                  </div>
+                  <div>
+                    {Number.isFinite(Number(warning?.minimum_time_gap_s))
+                      ? `${Number(warning.minimum_time_gap_s).toFixed(3)} s min gap`
+                      : '-'}
+                    <span>{currentRange}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="result-empty">
+            No basic overlap or ordering warnings were detected in the generated curves.
+          </p>
+        )}
+        {scopeNotes.length > 0 && (
+          <div className="result-scope-notes">
+            <strong>Out of Scope</strong>
+            <ul className="result-limitations">
+              {scopeNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       <div className="result-section">
         <h5>Device Curve Inputs</h5>

@@ -125,7 +125,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Start with high-signal warnings; full automatic coordination grading can evolve later."
     },
     {
