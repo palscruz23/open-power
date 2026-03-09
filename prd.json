@@ -31,7 +31,7 @@
         "Backend verification passes for at least one representative test network"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Use standards-oriented behavior and make any pandapower or engine limitations explicit rather than hiding them."
     },
     {

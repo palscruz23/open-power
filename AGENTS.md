@@ -160,7 +160,7 @@ Before finishing a change, run the checks relevant to the files touched.
 
 Typical checks:
 - Frontend: `npm run build` from `frontend/`
-- Backend: start/import the FastAPI app or run tests if present
+- Backend: start/import the FastAPI app or run tests if present, using the repo-local `.venv` Python on Windows (`.venv\Scripts\python.exe`) because the system Python may not include `pandapower`
 
 If study behavior changes, verify both:
 - load-flow execution

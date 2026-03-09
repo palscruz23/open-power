@@ -236,6 +236,102 @@ def health() -> Dict[str, str]:
     return {'status': 'ok'}
 
 
+def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, object]:
+    if payload.standard == 'ansi':
+        if payload.fault_type != 'three_phase':
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    'ANSI short-circuit mode currently supports only three-phase faults. '
+                    'Single-phase and earth-fault ANSI cases are not implemented in this release.'
+                )
+            )
+        if payload.current_type == 'thermal_equivalent':
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    'ANSI short-circuit mode does not provide thermal equivalent current in this release. '
+                    'Use initial symmetrical or peak current instead.'
+                )
+            )
+
+        return {
+            'standard_label': 'ANSI',
+            'engine_note': (
+                'Calculated with pandapower short-circuit max-case results and presented with ANSI-oriented labels.'
+            ),
+            'limitations': [
+                'ANSI mode currently supports only three-phase faults.',
+                'ANSI thermal equivalent current is not available in this release.'
+            ],
+            'current_types': {
+                'initial_symmetrical': {
+                    'bus_candidates': ['ikss_ka'],
+                    'from_candidates': ['ikss_from_ka', 'ikss_ka', 'ikss_ka_from'],
+                    'to_candidates': ['ikss_to_ka', 'ikss_ka_to', 'ikss_ka'],
+                    'mid_candidates': ['ikss_ka'],
+                    'trafo_from_candidates': ['ikss_hv_ka', 'ikss_ka_hv', 'ikss_ka'],
+                    'trafo_to_candidates': ['ikss_lv_ka', 'ikss_ka_lv', 'ikss_ka'],
+                    'trafo_mid_candidates': ['ikss_ka'],
+                    'result_key': 'ikss_ka',
+                    'label': 'ANSI symmetrical RMS current'
+                },
+                'peak': {
+                    'bus_candidates': ['ip_ka', 'ikss_ka'],
+                    'from_candidates': ['ip_from_ka', 'ip_ka_from', 'ip_ka', 'ikss_from_ka', 'ikss_ka'],
+                    'to_candidates': ['ip_to_ka', 'ip_ka_to', 'ip_ka', 'ikss_to_ka', 'ikss_ka'],
+                    'mid_candidates': ['ip_ka', 'ikss_ka'],
+                    'trafo_from_candidates': ['ip_hv_ka', 'ip_ka_hv', 'ip_ka', 'ikss_hv_ka', 'ikss_ka'],
+                    'trafo_to_candidates': ['ip_lv_ka', 'ip_ka_lv', 'ip_ka', 'ikss_lv_ka', 'ikss_ka'],
+                    'trafo_mid_candidates': ['ip_ka', 'ikss_ka'],
+                    'result_key': 'ip_ka',
+                    'label': 'ANSI peak making current'
+                }
+            }
+        }
+
+    return {
+        'standard_label': 'IEC 60909',
+        'engine_note': 'Calculated with pandapower IEC 60909 short-circuit results.',
+        'limitations': [],
+        'current_types': {
+            'initial_symmetrical': {
+                'bus_candidates': ['ikss_ka'],
+                'from_candidates': ['ikss_from_ka', 'ikss_ka', 'ikss_ka_from'],
+                'to_candidates': ['ikss_to_ka', 'ikss_ka_to', 'ikss_ka'],
+                'mid_candidates': ['ikss_ka'],
+                'trafo_from_candidates': ['ikss_hv_ka', 'ikss_ka_hv', 'ikss_ka'],
+                'trafo_to_candidates': ['ikss_lv_ka', 'ikss_ka_lv', 'ikss_ka'],
+                'trafo_mid_candidates': ['ikss_ka'],
+                'result_key': 'ikss_ka',
+                'label': 'Initial symmetrical current'
+            },
+            'peak': {
+                'bus_candidates': ['ip_ka', 'ikss_ka'],
+                'from_candidates': ['ip_from_ka', 'ip_ka_from', 'ip_ka', 'ikss_from_ka', 'ikss_ka'],
+                'to_candidates': ['ip_to_ka', 'ip_ka_to', 'ip_ka', 'ikss_to_ka', 'ikss_ka'],
+                'mid_candidates': ['ip_ka', 'ikss_ka'],
+                'trafo_from_candidates': ['ip_hv_ka', 'ip_ka_hv', 'ip_ka', 'ikss_hv_ka', 'ikss_ka'],
+                'trafo_to_candidates': ['ip_lv_ka', 'ip_ka_lv', 'ip_ka', 'ikss_lv_ka', 'ikss_ka'],
+                'trafo_mid_candidates': ['ip_ka', 'ikss_ka'],
+                'result_key': 'ip_ka',
+                'label': 'Peak short-circuit current'
+            },
+            'thermal_equivalent': {
+                'bus_candidates': ['ith_ka', 'ikss_ka'],
+                'from_candidates': ['ith_from_ka', 'ith_ka_from', 'ith_ka', 'ikss_from_ka', 'ikss_ka'],
+                'to_candidates': ['ith_to_ka', 'ith_ka_to', 'ith_ka', 'ikss_to_ka', 'ikss_ka'],
+                'mid_candidates': ['ith_ka', 'ikss_ka'],
+                'trafo_from_candidates': ['ith_hv_ka', 'ith_ka_hv', 'ith_ka', 'ikss_hv_ka', 'ikss_ka'],
+                'trafo_to_candidates': ['ith_lv_ka', 'ith_ka_lv', 'ith_ka', 'ikss_lv_ka', 'ikss_ka'],
+                'trafo_mid_candidates': ['ith_ka', 'ikss_ka'],
+                'result_key': 'ith_ka',
+                'label': 'Thermal equivalent current'
+            }
+        }
+    }
+
+
 @app.post('/api/calculate/load-flow')
 def calculate_load_flow(payload: NetworkInput):
     net, bus_map = build_network(payload, use_motor_elements=False)
@@ -366,6 +462,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
         raise HTTPException(status_code=503, detail='pandapower short-circuit module unavailable.')
 
     net, bus_map = build_network(payload, use_motor_elements=True)
+    standard_cfg = get_short_circuit_standard_config(payload)
 
     if payload.fault_bus_id not in bus_map:
         raise HTTPException(status_code=400, detail=f'Invalid fault bus reference: {payload.fault_bus_id}')
@@ -377,32 +474,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
     }
     fault_code = fault_map[payload.fault_type]
     fault_bus_idx = bus_map[payload.fault_bus_id]
-    current_type_config = {
-        'initial_symmetrical': {
-            'bus_candidates': ['ikss_ka'],
-            'from_candidates': ['ikss_from_ka', 'ikss_ka', 'ikss_ka_from'],
-            'to_candidates': ['ikss_to_ka', 'ikss_ka_to', 'ikss_ka'],
-            'mid_candidates': ['ikss_ka'],
-            'result_key': 'ikss_ka',
-            'label': 'Initial symmetrical current'
-        },
-        'peak': {
-            'bus_candidates': ['ip_ka', 'ikss_ka'],
-            'from_candidates': ['ip_from_ka', 'ip_ka_from', 'ip_ka', 'ikss_from_ka', 'ikss_ka'],
-            'to_candidates': ['ip_to_ka', 'ip_ka_to', 'ip_ka', 'ikss_to_ka', 'ikss_ka'],
-            'mid_candidates': ['ip_ka', 'ikss_ka'],
-            'result_key': 'ip_ka',
-            'label': 'Peak short-circuit current'
-        },
-        'thermal_equivalent': {
-            'bus_candidates': ['ith_ka', 'ikss_ka'],
-            'from_candidates': ['ith_from_ka', 'ith_ka_from', 'ith_ka', 'ikss_from_ka', 'ikss_ka'],
-            'to_candidates': ['ith_to_ka', 'ith_ka_to', 'ith_ka', 'ikss_to_ka', 'ikss_ka'],
-            'mid_candidates': ['ith_ka', 'ikss_ka'],
-            'result_key': 'ith_ka',
-            'label': 'Thermal equivalent current'
-        }
-    }
+    current_type_config = standard_cfg['current_types']
     selected_current_cfg = current_type_config[payload.current_type]
 
     try:
@@ -461,34 +533,15 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             }
 
     if hasattr(net, 'res_trafo_sc') and len(net.res_trafo_sc) > 0:
-        trafo_candidates = {
-            'initial_symmetrical': {
-                'hv_candidates': ['ikss_hv_ka', 'ikss_ka_hv', 'ikss_ka'],
-                'lv_candidates': ['ikss_lv_ka', 'ikss_ka_lv', 'ikss_ka'],
-                'mid_candidates': ['ikss_ka']
-            },
-            'peak': {
-                'hv_candidates': ['ip_hv_ka', 'ip_ka_hv', 'ip_ka', 'ikss_hv_ka', 'ikss_ka'],
-                'lv_candidates': ['ip_lv_ka', 'ip_ka_lv', 'ip_ka', 'ikss_lv_ka', 'ikss_ka'],
-                'mid_candidates': ['ip_ka', 'ikss_ka']
-            },
-            'thermal_equivalent': {
-                'hv_candidates': ['ith_hv_ka', 'ith_ka_hv', 'ith_ka', 'ikss_hv_ka', 'ikss_ka'],
-                'lv_candidates': ['ith_lv_ka', 'ith_ka_lv', 'ith_ka', 'ikss_lv_ka', 'ikss_ka'],
-                'mid_candidates': ['ith_ka', 'ikss_ka']
-            }
-        }
-        selected_trafo_cfg = trafo_candidates[payload.current_type]
-
         for trafo_index, row in net.res_trafo_sc.iterrows():
             trafo_name = str(net.trafo.loc[trafo_index, 'name'] or f'trafo-{trafo_index}')
             result_key = f'line-{trafo_name}'
             hv_bus_idx = int(net.trafo.loc[trafo_index, 'hv_bus'])
             lv_bus_idx = int(net.trafo.loc[trafo_index, 'lv_bus'])
 
-            current_from = read_float(row, selected_trafo_cfg['hv_candidates'])
-            current_to = read_float(row, selected_trafo_cfg['lv_candidates'])
-            current_mid = read_float(row, selected_trafo_cfg['mid_candidates'])
+            current_from = read_float(row, selected_current_cfg['trafo_from_candidates'])
+            current_to = read_float(row, selected_current_cfg['trafo_to_candidates'])
+            current_mid = read_float(row, selected_current_cfg['trafo_mid_candidates'])
 
             candidates = [
                 abs(current)
@@ -545,10 +598,13 @@ def calculate_short_circuit(payload: ShortCircuitInput):
         'fault': {
             'bus_id': payload.fault_bus_id,
             'standard': payload.standard,
+            'standard_label': standard_cfg['standard_label'],
             'fault_type': payload.fault_type,
             'current_type': payload.current_type,
             'current_type_label': selected_current_cfg['label'],
-            'current_result_key': selected_current_cfg['result_key']
+            'current_result_key': selected_current_cfg['result_key'],
+            'engine_note': standard_cfg['engine_note'],
+            'limitations': standard_cfg['limitations']
         },
         'fault_bus': {
             'current_ka': round(float(fault_bus_current), 5),
