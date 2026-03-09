@@ -139,7 +139,7 @@
         "Typecheck/build passes and backend verification passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "This task keeps the roadmap maintainable as more studies are added."
     },
     {

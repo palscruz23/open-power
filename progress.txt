@@ -2,6 +2,7 @@
 - Keep this section updated with reusable patterns discovered during implementation.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
+- Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
 - Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
@@ -120,4 +121,37 @@
   - Protection coordination warnings should be derived from the generated `curves` data and returned through `result.analysis`; that keeps review feedback and chart rendering on the same source of truth.
   - The control-panel protection results surface is the right place to separate warnings from raw curve data; keep analysis feedback there instead of folding it into the chart legend or generic error area.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+---
+## [2026-03-09T20:54:03Z] - US-008 (runner)
+- Runner executed Codex session for US-008 - Add protection coordination analysis feedback
+- Exit code: 0
+- Files changed in working tree after run:
+  - ralph_loop.sh
+- Latest commit: b148d3a feat: [US-008] - [Add protection coordination analysis feedback]
+---
+## [2026-03-09T20:56:12Z] - US-009 (runner)
+- Runner executed Codex session for US-009 - Improve reusable network data model for multi-study support
+- Exit code: 0
+- Files changed in working tree after run:
+  - progress.txt
+  - ralph_loop.sh
+- Latest commit: b148d3a feat: [US-008] - [Add protection coordination analysis feedback]
+---
+## [2026-03-09T20:56:43Z] - US-009 (runner)
+- Runner executed Codex session for US-009 - Improve reusable network data model for multi-study support
+- Exit code: 1
+- Files changed in working tree after run:
+  - progress.txt
+  - ralph_loop.sh
+- Latest commit: b148d3a feat: [US-008] - [Add protection coordination analysis feedback]
+---
+## 2026-03-10 09:37:19 +10:30 - US-009
+- Refactored shared frontend study serialization into `frontend/src/utils/networkPayload.js` and switched `LoadFlowStudyPage.jsx` to build load-flow, short-circuit, and protection payloads from one shared network model plus per-study options.
+- Split backend request typing into a shared `SharedNetworkInput` base with explicit `LoadFlowInput`, `ShortCircuitInput`, and `ProtectionStudyInput` models, using `Field(default_factory=list)` to keep optional network collections safe and backward-compatible.
+- Added load-flow regression coverage to confirm the shared model still accepts existing payloads and ignores persisted protection-device metadata when running non-protection studies.
+- Files changed: `frontend/src/utils/networkPayload.js`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `backend/main.py`, `backend/test_load_flow.py`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Treat `frontend/src/utils/networkPayload.js` as the single source of truth for graph-to-API mapping; `LoadFlowStudyPage.jsx` should choose a study builder, not re-encode buses/loads/transformers inline.
+  - Backend study request models can stay explicit without fragmenting the contract by inheriting from one shared network-input base and adding only the study-specific fields per endpoint.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node --input-type=module -e \"import('./src/utils/networkPayload.js')\"` passed as a limited frontend syntax check.
 ---

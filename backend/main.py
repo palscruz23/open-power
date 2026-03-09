@@ -76,23 +76,27 @@ class ProtectionDevice(BaseModel):
     settings: ProtectionSettings = Field(default_factory=ProtectionSettings)
 
 
-class NetworkInput(BaseModel):
+class SharedNetworkInput(BaseModel):
     buses: List[Bus]
-    lines: List[Line] = []
-    transformers: List[Transformer] = []
-    loads: List[Load] = []
-    generators: List[Generator] = []
-    protection_devices: List[ProtectionDevice] = []
+    lines: List[Line] = Field(default_factory=list)
+    transformers: List[Transformer] = Field(default_factory=list)
+    loads: List[Load] = Field(default_factory=list)
+    generators: List[Generator] = Field(default_factory=list)
+    protection_devices: List[ProtectionDevice] = Field(default_factory=list)
 
 
-class ShortCircuitInput(NetworkInput):
+class LoadFlowInput(SharedNetworkInput):
+    pass
+
+
+class ShortCircuitInput(SharedNetworkInput):
     standard: Literal['ansi', 'iec_60909'] = 'ansi'
     fault_bus_id: str
     fault_type: Literal['three_phase', 'single_phase', 'earth_fault'] = 'three_phase'
     current_type: Literal['initial_symmetrical', 'peak', 'thermal_equivalent'] = 'initial_symmetrical'
 
 
-class ProtectionStudyInput(NetworkInput):
+class ProtectionStudyInput(SharedNetworkInput):
     coordination_margin_s: float = Field(default=0.3, ge=0)
 
 
@@ -118,7 +122,7 @@ def ensure_engine_available() -> None:
         )
 
 
-def build_network(payload: NetworkInput, use_motor_elements: bool = False):
+def build_network(payload: SharedNetworkInput, use_motor_elements: bool = False):
     ensure_engine_available()
 
     if len(payload.buses) == 0:
@@ -1018,7 +1022,7 @@ def analyze_protection_coordination(
 
 
 @app.post('/api/calculate/load-flow')
-def calculate_load_flow(payload: NetworkInput):
+def calculate_load_flow(payload: LoadFlowInput):
     net, bus_map = build_network(payload, use_motor_elements=False)
 
     try:
