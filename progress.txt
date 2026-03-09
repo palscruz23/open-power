@@ -7,6 +7,7 @@
 - Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
 - Protection coordination now returns per-device summaries plus a top-level `curves` array; future charting and analysis work should extend that response instead of inventing a second protection-results shape.
 - Transformer protection curves currently choose the protected transformer side by comparing the configured pickup current against the transformer's rated HV/LV currents; keep that heuristic aligned with any future transformer-side settings.
+- Protection coordination charting lives in `frontend/src/components/ControlPanel.jsx` as a native SVG view driven directly by the backend `curves` array; keep loading/error/content state there and avoid adding a second frontend-only curve model.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -85,4 +86,20 @@
   - Curve generation depends on both solved load-flow currents and short-circuit fault current at the device bus, so backend smoke checks should continue covering load flow, short circuit, and protection together on the same representative network.
   - Transformer-attached protection devices currently infer the protected side from pickup current versus transformer rated current; if the UI later adds explicit transformer-side selection, this backend heuristic will need to be replaced in both validation and curve generation.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; direct smoke execution of load-flow, ANSI short-circuit, and protection coordination via `.venv\\Scripts\\python.exe` passed; `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config.
+---
+## [2026-03-09T15:07:14Z] - US-006 (runner)
+- Runner executed Codex session for US-006 - Generate time-current characteristic curves from the single-line diagram
+- Exit code: 0
+- Files changed in working tree after run:
+  - none
+- Latest commit: 004102e feat: [US-006] - [Generate time-current characteristic curves from the single-line diagram]
+---
+## 2026-03-10 01:42:02 +10:30 - US-007
+- Implemented an interactive protection-coordination TCC chart in the control panel using native SVG, with log-scaled axes, per-device styling, hover inspection, and a legend that makes overlapping curves easier to distinguish.
+- Added explicit protection coordination empty, loading, error, and content states by threading the study request lifecycle from `LoadFlowStudyPage.jsx` into the protection results renderer.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Protection coordination result-state handling now lives with the chart renderer in `frontend/src/components/ControlPanel.jsx`; keep the protection panel stateful there instead of falling back to the generic `error`/`result` rendering path.
+  - `frontend/src/pages/LoadFlowStudyPage.jsx` owns the request lifecycle for all studies, so frontend loading states should be added there and passed into the relevant result surface rather than inferred from `result === null`.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
 ---

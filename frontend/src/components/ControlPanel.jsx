@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
 
 const PROTECTION_DEVICE_TYPE_OPTIONS = [
@@ -21,6 +22,336 @@ const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
   'utility',
   'transformer'
 ]);
+
+const PROTECTION_CURVE_STYLES = [
+  { color: '#0f6d34', dasharray: '0' },
+  { color: '#1d4ed8', dasharray: '10 6' },
+  { color: '#b45309', dasharray: '4 4' },
+  { color: '#7c3aed', dasharray: '12 5 3 5' },
+  { color: '#be123c', dasharray: '2 5' },
+  { color: '#0f766e', dasharray: '14 6' }
+];
+
+function clampLogDomain(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function formatProtectionCurrent(value) {
+  if (!Number.isFinite(value) || value <= 0) return '-';
+  return value >= 1000 ? `${(value / 1000).toFixed(2)} kA` : `${value.toFixed(0)} A`;
+}
+
+function formatProtectionTime(value) {
+  if (!Number.isFinite(value) || value <= 0) return '-';
+  if (value >= 1) return `${value.toFixed(2)} s`;
+  if (value >= 0.1) return `${value.toFixed(3)} s`;
+  return `${(value * 1000).toFixed(1)} ms`;
+}
+
+function formatProtectionSettingSource(curve) {
+  const parts = [curve?.curve_family_label || curve?.curve_family || 'Curve'];
+  if (Number.isFinite(Number(curve?.pickup_current_a))) {
+    parts.push(`pickup ${formatProtectionCurrent(Number(curve.pickup_current_a))}`);
+  }
+  if (Number.isFinite(Number(curve?.time_dial))) {
+    parts.push(`TD ${Number(curve.time_dial).toFixed(2)}`);
+  }
+  if (Number.isFinite(Number(curve?.instantaneous_pickup_a))) {
+    parts.push(`inst ${formatProtectionCurrent(Number(curve.instantaneous_pickup_a))}`);
+  }
+  return parts.join(' | ');
+}
+
+function buildLogTicks(minValue, maxValue) {
+  const safeMin = clampLogDomain(minValue, 1);
+  const safeMax = clampLogDomain(maxValue, safeMin * 10);
+  const ticks = [];
+  const startDecade = Math.floor(Math.log10(safeMin));
+  const endDecade = Math.ceil(Math.log10(safeMax));
+
+  for (let exponent = startDecade; exponent <= endDecade; exponent += 1) {
+    const value = 10 ** exponent;
+    if (value >= safeMin * 0.999 && value <= safeMax * 1.001) {
+      ticks.push(value);
+    }
+  }
+
+  if (ticks.length === 0) {
+    ticks.push(safeMin, safeMax);
+  }
+
+  return [...new Set(ticks)].sort((a, b) => a - b);
+}
+
+function ProtectionCurvesChart({ curves }) {
+  const [activeCurveId, setActiveCurveId] = useState('');
+  const [activePoint, setActivePoint] = useState(null);
+
+  const chartData = useMemo(() => {
+    const preparedCurves = curves
+      .map((curve, index) => {
+        const validPoints = Array.isArray(curve?.points)
+          ? curve.points
+              .map((point) => ({
+                current_a: Number(point?.current_a),
+                time_s: Number(point?.time_s),
+                region: point?.region || 'curve'
+              }))
+              .filter((point) => Number.isFinite(point.current_a) && point.current_a > 0 && Number.isFinite(point.time_s) && point.time_s > 0)
+          : [];
+
+        if (validPoints.length === 0) return null;
+
+        return {
+          ...curve,
+          chartId: `${curve.device_id || curve.asset_id || index}-${index}`,
+          style: PROTECTION_CURVE_STYLES[index % PROTECTION_CURVE_STYLES.length],
+          points: validPoints
+        };
+      })
+      .filter(Boolean);
+
+    const allPoints = preparedCurves.flatMap((curve) => curve.points);
+    const currentValues = allPoints.map((point) => point.current_a);
+    const timeValues = allPoints.map((point) => point.time_s);
+
+    const minCurrent = Math.min(...currentValues);
+    const maxCurrent = Math.max(...currentValues);
+    const minTime = Math.min(...timeValues);
+    const maxTime = Math.max(...timeValues);
+
+    return {
+      curves: preparedCurves,
+      domain: {
+        minCurrent: clampLogDomain(minCurrent / 1.25, 1),
+        maxCurrent: clampLogDomain(maxCurrent * 1.15, 10),
+        minTime: clampLogDomain(minTime / 1.35, 0.01),
+        maxTime: clampLogDomain(maxTime * 1.35, 1)
+      }
+    };
+  }, [curves]);
+
+  if (chartData.curves.length === 0) {
+    return <p className="result-empty">No time-current curve data was returned for this study.</p>;
+  }
+
+  const width = 720;
+  const height = 420;
+  const margin = { top: 24, right: 20, bottom: 52, left: 72 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const {
+    minCurrent,
+    maxCurrent,
+    minTime,
+    maxTime
+  } = chartData.domain;
+  const logMinCurrent = Math.log10(minCurrent);
+  const logMaxCurrent = Math.log10(maxCurrent);
+  const logMinTime = Math.log10(minTime);
+  const logMaxTime = Math.log10(maxTime);
+  const xTicks = buildLogTicks(minCurrent, maxCurrent);
+  const yTicks = buildLogTicks(minTime, maxTime);
+
+  const toX = (value) =>
+    margin.left + ((Math.log10(value) - logMinCurrent) / (logMaxCurrent - logMinCurrent || 1)) * plotWidth;
+  const toY = (value) =>
+    margin.top + plotHeight - ((Math.log10(value) - logMinTime) / (logMaxTime - logMinTime || 1)) * plotHeight;
+
+  return (
+    <div className="protection-chart">
+      <div className="protection-chart__header">
+        <div>
+          <h5>TCC Chart</h5>
+          <p className="result-note">
+            Log-log view of operating time against current for each accepted device.
+          </p>
+        </div>
+        <div className="protection-chart__focus">
+          {activePoint ? (
+            <>
+              <strong>{activePoint.deviceName}</strong>
+              <span>{activePoint.settingSource}</span>
+              <span>
+                {formatProtectionCurrent(activePoint.currentA)} at {formatProtectionTime(activePoint.timeS)}
+              </span>
+            </>
+          ) : (
+            <>
+              <strong>Hover a curve</strong>
+              <span>Inspect current and time values from the chart.</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="protection-chart__frame">
+        <svg
+          className="protection-chart__svg"
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="Protection coordination time-current characteristic chart"
+        >
+          <rect x="0" y="0" width={width} height={height} rx="16" fill="#ffffff" />
+
+          {xTicks.map((tick) => {
+            const x = toX(tick);
+            return (
+              <g key={`x-${tick}`}>
+                <line
+                  x1={x}
+                  y1={margin.top}
+                  x2={x}
+                  y2={margin.top + plotHeight}
+                  className="protection-chart__grid"
+                />
+                <text x={x} y={height - 20} textAnchor="middle" className="protection-chart__axis-label">
+                  {formatProtectionCurrent(tick)}
+                </text>
+              </g>
+            );
+          })}
+
+          {yTicks.map((tick) => {
+            const y = toY(tick);
+            return (
+              <g key={`y-${tick}`}>
+                <line
+                  x1={margin.left}
+                  y1={y}
+                  x2={margin.left + plotWidth}
+                  y2={y}
+                  className="protection-chart__grid"
+                />
+                <text x={margin.left - 12} y={y + 4} textAnchor="end" className="protection-chart__axis-label">
+                  {formatProtectionTime(tick)}
+                </text>
+              </g>
+            );
+          })}
+
+          <line
+            x1={margin.left}
+            y1={margin.top + plotHeight}
+            x2={margin.left + plotWidth}
+            y2={margin.top + plotHeight}
+            className="protection-chart__axis"
+          />
+          <line
+            x1={margin.left}
+            y1={margin.top}
+            x2={margin.left}
+            y2={margin.top + plotHeight}
+            className="protection-chart__axis"
+          />
+
+          <text
+            x={margin.left + plotWidth / 2}
+            y={height - 6}
+            textAnchor="middle"
+            className="protection-chart__title"
+          >
+            Current
+          </text>
+          <text
+            x="18"
+            y={margin.top + plotHeight / 2}
+            textAnchor="middle"
+            transform={`rotate(-90 18 ${margin.top + plotHeight / 2})`}
+            className="protection-chart__title"
+          >
+            Operating Time
+          </text>
+
+          {chartData.curves.map((curve) => {
+            const path = curve.points
+              .map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(point.current_a)} ${toY(point.time_s)}`)
+              .join(' ');
+            const isActive = !activeCurveId || activeCurveId === curve.chartId;
+
+            return (
+              <g key={curve.chartId}>
+                <path
+                  d={path}
+                  fill="none"
+                  stroke={curve.style.color}
+                  strokeWidth={activeCurveId === curve.chartId ? 4 : 3}
+                  strokeDasharray={curve.style.dasharray}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={isActive ? 1 : 0.24}
+                  onMouseEnter={() => setActiveCurveId(curve.chartId)}
+                  onMouseLeave={() => {
+                    setActiveCurveId('');
+                    setActivePoint(null);
+                  }}
+                >
+                  <title>{`${curve.device_name}: ${formatProtectionSettingSource(curve)}`}</title>
+                </path>
+                {curve.points.map((point, index) => {
+                  const isHighlighted =
+                    activePoint?.curveId === curve.chartId &&
+                    activePoint?.pointIndex === index;
+                  return (
+                    <circle
+                      key={`${curve.chartId}-${point.current_a}-${point.time_s}-${index}`}
+                      cx={toX(point.current_a)}
+                      cy={toY(point.time_s)}
+                      r={isHighlighted ? 5 : 3}
+                      fill={curve.style.color}
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                      opacity={isActive ? 0.92 : 0.24}
+                      onMouseEnter={() => {
+                        setActiveCurveId(curve.chartId);
+                        setActivePoint({
+                          curveId: curve.chartId,
+                          pointIndex: index,
+                          currentA: point.current_a,
+                          timeS: point.time_s,
+                          deviceName: curve.device_name,
+                          settingSource: formatProtectionSettingSource(curve)
+                        });
+                      }}
+                      onMouseLeave={() => setActivePoint(null)}
+                    >
+                      <title>{`${curve.device_name}: ${formatProtectionCurrent(point.current_a)}, ${formatProtectionTime(point.time_s)}`}</title>
+                    </circle>
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="protection-chart__legend" role="list" aria-label="Protection device curve legend">
+        {chartData.curves.map((curve) => {
+          const style = curve.style;
+          const isActive = !activeCurveId || activeCurveId === curve.chartId;
+          return (
+            <button
+              key={curve.chartId}
+              type="button"
+              className={`protection-chart__legend-item${isActive ? '' : ' protection-chart__legend-item--muted'}`}
+              onMouseEnter={() => setActiveCurveId(curve.chartId)}
+              onMouseLeave={() => setActiveCurveId('')}
+            >
+              <span
+                className="protection-chart__legend-swatch"
+                style={{ '--curve-color': style.color, '--curve-dash': style.dasharray }}
+              />
+              <span>
+                <strong>{curve.device_name}</strong>
+                <span>{formatProtectionSettingSource(curve)}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function getShortCircuitCurrentTag(fault) {
   if (!fault) return 'Isc';
@@ -144,9 +475,45 @@ function renderShortCircuitResults(result) {
   );
 }
 
-function renderProtectionResults(result) {
+function renderProtectionResults(result, error, isLoading) {
   const devices = Array.isArray(result?.devices) ? result.devices : [];
   const curves = Array.isArray(result?.curves) ? result.curves : [];
+
+  if (isLoading) {
+    return (
+      <div className="study-result study-result--protection">
+        <h4>Protection Coordination Results</h4>
+        <div className="result-state-card result-state-card--loading">
+          <strong>Generating coordination curves</strong>
+          <span>Solving the network and building device TCC points.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="study-result study-result--protection">
+        <h4>Protection Coordination Results</h4>
+        <div className="result-state-card result-state-card--error">
+          <strong>Protection coordination failed</strong>
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="study-result study-result--protection">
+        <h4>Protection Coordination Results</h4>
+        <div className="result-state-card">
+          <strong>No coordination run yet</strong>
+          <span>Configure at least one device, then run the study to render interactive TCC curves.</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="study-result study-result--protection">
@@ -193,32 +560,7 @@ function renderProtectionResults(result) {
         )}
       </div>
       <div className="result-section">
-        <h5>Generated Curves</h5>
-        {curves.length > 0 ? (
-          <div className="result-list">
-            {curves.map((curve) => {
-              const firstPoint = curve.points?.[0];
-              const lastPoint = curve.points?.[curve.points.length - 1];
-              return (
-                <div className="result-list-row" key={`${curve.device_id}-${curve.device_name}`}>
-                  <div>
-                    <strong>{curve.device_name}</strong>
-                    <span>
-                      {curve.curve_family_label} on {curve.bus_id}
-                    </span>
-                  </div>
-                  <div>
-                    {firstPoint && lastPoint
-                      ? `${firstPoint.current_a.toFixed(0)}-${lastPoint.current_a.toFixed(0)} A`
-                      : 'No points'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="result-empty">No time-current curve data was returned for this study.</p>
-        )}
+        <ProtectionCurvesChart curves={curves} />
       </div>
     </div>
   );
@@ -245,7 +587,8 @@ export default function ControlPanel({
   shortCircuitFaultBusId,
   onShortCircuitFaultBusIdChange,
   onRunProtection,
-  protectionDeviceCount
+  protectionDeviceCount,
+  isStudyRunning
 }) {
   const isLoadFlow = studyType === 'loadflow';
   const isShortCircuit = studyType === 'shortcircuit';
@@ -688,15 +1031,16 @@ export default function ControlPanel({
         </div>
       )}
 
-      {error && <pre className="error">{error}</pre>}
-      {result &&
-        (isShortCircuit ? (
+      {!isProtection && error && <pre className="error">{error}</pre>}
+      {isProtection ? (
+        renderProtectionResults(result, error, isStudyRunning)
+      ) : result ? (
+        isShortCircuit ? (
           renderShortCircuitResults(result)
-        ) : isProtection ? (
-          renderProtectionResults(result)
         ) : (
           <pre className="result">{JSON.stringify(result, null, 2)}</pre>
-        ))}
+        )
+      ) : null}
     </section>
   );
 }

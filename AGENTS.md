@@ -107,6 +107,7 @@ If you change what a node can edit or display, review:
 - `frontend/src/components/ControlPanel.jsx`
 - `frontend/src/components/SymbolNodes.jsx`
 - `frontend/src/pages/LoadFlowStudyPage.jsx`
+- Protection coordination charting currently lives in `frontend/src/components/ControlPanel.jsx` as a native SVG renderer fed by the backend `curves` array; extend that surface before adding a charting dependency or inventing a second result shape.
 
 If you change study routing or app-level navigation, also review:
 - `frontend/src/App.jsx`

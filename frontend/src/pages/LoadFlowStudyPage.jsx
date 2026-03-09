@@ -141,6 +141,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const [clipboard, setClipboard] = useState({ nodes: [], edges: [] });
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [isStudyRunning, setIsStudyRunning] = useState(false);
   const [showRatings, setShowRatings] = useState(false);
   const [shortCircuitStandard, setShortCircuitStandard] = useState('ansi');
   const [shortCircuitFaultType, setShortCircuitFaultType] = useState('three_phase');
@@ -628,6 +629,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const callStudy = useCallback(
     async (studyType) => {
       try {
+        setIsStudyRunning(true);
         setError('');
         setResult(null);
         const payload = mapToPayload();
@@ -1103,6 +1105,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         setResult(response.data);
       } catch (err) {
         setError(err.response?.data?.detail || err.message);
+      } finally {
+        setIsStudyRunning(false);
       }
     },
     [
@@ -1590,6 +1594,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         shortCircuitFaultBusId={shortCircuitFaultBusId}
         onShortCircuitFaultBusIdChange={setShortCircuitFaultBusId}
         protectionDeviceCount={protectionDeviceCount}
+        isStudyRunning={isStudyRunning}
       />
     </div>
   );
