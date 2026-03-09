@@ -50,6 +50,7 @@ require_file "$PROMPT_FILE"
 require_cmd git
 require_cmd node
 require_cmd codex
+require_cmd gh
 
 if [[ ! -f "$PROGRESS_FILE" ]]; then
   cat > "$PROGRESS_FILE" <<'EOF'
@@ -72,9 +73,9 @@ fi
 
 progress_start_line=$(( $(wc -l < "$PROGRESS_FILE") + 1 ))
 
-branch_name="$(read_json "d.branchName")"
-if [[ -z "$branch_name" ]]; then
-  echo "branchName is missing in prd.json" >&2
+branch_prefix="$(read_json "d.branchPrefix ?? d.branchName ?? 'review'")"
+if [[ -z "$branch_prefix" ]]; then
+  echo "branchPrefix is missing in prd.json" >&2
   exit 1
 fi
 
@@ -87,6 +88,8 @@ fi
 
 task_id="$(node -e "const t=$next_task_json;console.log(t.id||'UNKNOWN');")"
 task_title="$(node -e "const t=$next_task_json;console.log(t.title||'Untitled');")"
+task_slug="$(node -e "const t=$next_task_json; const slug=String(t.title||'untitled').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').replace(/-+/g,'-').slice(0,48) || 'untitled'; console.log(slug);")"
+branch_name="${branch_prefix}/${task_id,,}-${task_slug}"
 
 echo "[ralph] Working on $task_id - $task_title"
 
@@ -112,6 +115,7 @@ cat >> "$tmp_prompt" <<EOF
 Implement exactly one story this run:
 - Story ID: $task_id
 - Story Title: $task_title
+- Story Branch: $branch_name
 - Story JSON: $next_task_json
 
 Rules for this run:
@@ -121,10 +125,16 @@ Rules for this run:
 - Never set \`accepted\`; that field is reserved for human review.
 - Append an entry to progress.txt using the required format.
 - If all stories are implemented, output: <promise>COMPLETE</promise>
+- Be terse in commentary and final output.
+- Keep progress updates to at most 2 short sentences.
+- Do not restate the task after starting.
+- Do not explain routine file reads, searches, or obvious edits.
+- Mention only blockers, implementation decisions, verification results, and concrete outcomes.
+- Keep the final response under 6 lines unless there is a blocker or failed check that requires more detail.
 EOF
 
 set +e
-echo "[ralph] Launching Codex"
+echo "[ralph] Launching"
 codex exec --full-auto -C "$ROOT_DIR" "$(cat "$tmp_prompt")"
 codex_exit=$?
 set -e
@@ -138,3 +148,25 @@ if [[ $codex_exit -ne 0 ]]; then
 fi
 
 git -C "$ROOT_DIR" push -u origin "$branch_name"
+
+existing_pr_url="$(gh pr list --repo "$(git -C "$ROOT_DIR" remote get-url origin)" --head "$branch_name" --base main --state open --json url --jq '.[0].url' 2>/dev/null || true)"
+if [[ -n "${existing_pr_url:-}" ]]; then
+  echo "PR already open: $existing_pr_url"
+else
+  pr_body="$(cat <<EOF
+Automated PR for $task_id - $task_title.
+
+- Review the code changes on this branch
+- Confirm the checks/statuses are acceptable
+- Merge to \`main\` when approved
+EOF
+)"
+  gh pr create \
+    --repo "$(git -C "$ROOT_DIR" remote get-url origin)" \
+    --base main \
+    --head "$branch_name" \
+    --title "[$task_id] $task_title" \
+    --body "$pr_body"
+fi
+
+echo "Completed session for $task_id"
