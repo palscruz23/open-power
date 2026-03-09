@@ -16,7 +16,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "This task establishes the common product and API entry point used by both short-circuit standards."
     },
     {

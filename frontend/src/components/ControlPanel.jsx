@@ -10,6 +10,8 @@ export default function ControlPanel({
   error,
   busCount,
   busNodes,
+  shortCircuitStandard,
+  onShortCircuitStandardChange,
   shortCircuitFaultType,
   onShortCircuitFaultTypeChange,
   shortCircuitCurrentType,
@@ -41,6 +43,16 @@ export default function ControlPanel({
       {isShortCircuit && (
         <div className="editor">
           <h4>Short Circuit Setup</h4>
+          <label>
+            Calculation Standard
+            <select
+              value={shortCircuitStandard}
+              onChange={(e) => onShortCircuitStandardChange(e.target.value)}
+            >
+              <option value="ansi">ANSI</option>
+              <option value="iec_60909">IEC 60909</option>
+            </select>
+          </label>
           <label>
             Fault Type
             <select

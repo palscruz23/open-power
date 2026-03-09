@@ -125,6 +125,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [showRatings, setShowRatings] = useState(false);
+  const [shortCircuitStandard, setShortCircuitStandard] = useState('ansi');
   const [shortCircuitFaultType, setShortCircuitFaultType] = useState('three_phase');
   const [shortCircuitCurrentType, setShortCircuitCurrentType] = useState('initial_symmetrical');
   const [shortCircuitFaultBusId, setShortCircuitFaultBusId] = useState('');
@@ -555,6 +556,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           }
 
           payload.fault_bus_id = shortCircuitFaultBusId;
+          payload.standard = shortCircuitStandard;
           payload.fault_type = shortCircuitFaultType;
           payload.current_type = shortCircuitCurrentType;
         }
@@ -1006,6 +1008,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     [
       mapToPayload,
       shortCircuitFaultBusId,
+      shortCircuitStandard,
       shortCircuitFaultType,
       shortCircuitCurrentType,
       clearLoadFlowAnnotations,
@@ -1476,6 +1479,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         error={error}
         busCount={busCount}
         busNodes={busNodes}
+        shortCircuitStandard={shortCircuitStandard}
+        onShortCircuitStandardChange={setShortCircuitStandard}
         shortCircuitFaultType={shortCircuitFaultType}
         onShortCircuitFaultTypeChange={setShortCircuitFaultType}
         shortCircuitCurrentType={shortCircuitCurrentType}

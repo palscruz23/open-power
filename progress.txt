@@ -1,3 +1,15 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
+- Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 
+## 2026-03-10 00:45:07 +10:30 - US-001
+- Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
+- Wired the selected standard through the shared short-circuit request payload and backend request model without changing load-flow behavior or graph persistence.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `backend/main.py`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - The short-circuit setup UI lives in `frontend/src/components/ControlPanel.jsx`, but the actual study state and API payload assembly live in `frontend/src/pages/LoadFlowStudyPage.jsx`.
+  - Shared load-flow and short-circuit persistence depends on the `openpower:network:shared` storage key, so study-specific options should not be added to persisted node or edge data.
+  - The backend short-circuit contract is defined by `ShortCircuitInput` in `backend/main.py`; adding new study inputs there keeps frontend/backend changes aligned.
+  - Checks run this iteration: backend import/smoke check passed; `npm.cmd run build` was attempted but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+  - Thread URL: unavailable in this Codex session.
+---

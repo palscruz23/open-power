@@ -68,6 +68,7 @@ class NetworkInput(BaseModel):
 
 
 class ShortCircuitInput(NetworkInput):
+    standard: Literal['ansi', 'iec_60909'] = 'ansi'
     fault_bus_id: str
     fault_type: Literal['three_phase', 'single_phase', 'earth_fault'] = 'three_phase'
     current_type: Literal['initial_symmetrical', 'peak', 'thermal_equivalent'] = 'initial_symmetrical'
@@ -543,6 +544,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
     return {
         'fault': {
             'bus_id': payload.fault_bus_id,
+            'standard': payload.standard,
             'fault_type': payload.fault_type,
             'current_type': payload.current_type,
             'current_type_label': selected_current_cfg['label'],
