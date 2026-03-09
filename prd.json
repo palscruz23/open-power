@@ -1,0 +1,176 @@
+{
+  "project": "OpenPower Studio",
+  "branchName": "main",
+  "description": "OpenPower Studio roadmap focused on standards-based short-circuit analysis and full protection coordination, while preserving the existing local single-line editor and study workflow.",
+  "tasks": [
+    {
+      "id": "US-001",
+      "title": "Add short-circuit standard selector to the shared study workflow",
+      "description": "As a power system engineer, I want one short-circuit study workflow with a selectable calculation standard so I can run comparable fault studies without redrawing the network.",
+      "acceptanceCriteria": [
+        "Short-circuit study UI includes a calculation standard selector with at least ANSI and IEC 60909 options",
+        "The selected standard is sent as part of the short-circuit API request payload",
+        "Load-flow behavior remains unchanged",
+        "Existing shared-network persistence still works for load-flow and short-circuit studies",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "This task establishes the common product and API entry point used by both short-circuit standards."
+    },
+    {
+      "id": "US-002",
+      "title": "Implement ANSI short-circuit calculations",
+      "description": "As a power system engineer, I want to run ANSI-based short-circuit calculations so I can evaluate fault duties using an ANSI-oriented method.",
+      "acceptanceCriteria": [
+        "Backend accepts ANSI as a valid short-circuit standard",
+        "ANSI calculations return fault-bus current and branch contribution results for supported network elements",
+        "Response clearly labels the calculation standard and current quantity being shown",
+        "Unsupported ANSI-specific cases fail with clear user-facing validation or limitation messages",
+        "Backend verification passes for at least one representative test network"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Use standards-oriented behavior and make any pandapower or engine limitations explicit rather than hiding them."
+    },
+    {
+      "id": "US-003",
+      "title": "Implement IEC 60909 short-circuit calculations",
+      "description": "As a power system engineer, I want to run IEC 60909 short-circuit calculations so I can evaluate faults using the IEC method and compare results against ANSI studies.",
+      "acceptanceCriteria": [
+        "Backend accepts IEC 60909 as a valid short-circuit standard",
+        "IEC 60909 calculations return fault-bus current and branch contribution results for supported network elements",
+        "Response clearly labels the calculation standard and current quantity being shown",
+        "Short-circuit results expose method-specific outputs without reusing ANSI labels incorrectly",
+        "Backend verification passes for at least one representative test network"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "This is the standards-reference short-circuit mode and should expose IEC-specific naming where applicable."
+    },
+    {
+      "id": "US-004",
+      "title": "Show standard-aware short-circuit results in the frontend",
+      "description": "As a power system engineer, I want the canvas and results panel to show which short-circuit standard generated the displayed values so I can interpret results correctly.",
+      "acceptanceCriteria": [
+        "Short-circuit results panel displays the selected standard alongside current-type information",
+        "Fault annotations on buses and branches remain readable when ANSI or IEC 60909 is selected",
+        "Any unsupported standard-specific output is shown as a clear limitation, not as blank or misleading values",
+        "Running a second short-circuit study replaces prior annotations cleanly",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Keep the shared graph workflow intact and avoid persisting transient result annotations."
+    },
+    {
+      "id": "US-005",
+      "title": "Model protection devices and settings for coordination studies",
+      "description": "As a protection engineer, I want to assign protection devices and curve settings to the single-line diagram so the app can generate coordination studies from the drawn network.",
+      "acceptanceCriteria": [
+        "The frontend supports attaching protection devices to relevant parts of the single-line diagram",
+        "Device settings required for time-current coordination are captured in a structured form",
+        "The backend accepts protection-device and settings data without breaking existing studies",
+        "Validation prevents running protection coordination with missing required device inputs",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Define a minimal but extensible device/settings model suitable for TCC generation."
+    },
+    {
+      "id": "US-006",
+      "title": "Generate time-current characteristic curves from the single-line diagram",
+      "description": "As a protection engineer, I want the app to generate time-current characteristic curves from my single-line diagram so I can analyze relay and device coordination visually.",
+      "acceptanceCriteria": [
+        "Protection coordination study can be run from the existing study workflow",
+        "The study returns time-current curve data for the configured devices",
+        "The curve data is derived from the network and assigned device settings, not from hardcoded demo data",
+        "If the network is insufficient for a coordination study, the user sees a clear actionable error message",
+        "Backend verification passes for at least one representative coordination scenario"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "This task focuses on producing valid curve data, not only placeholder UI."
+    },
+    {
+      "id": "US-007",
+      "title": "Render interactive protection coordination curves in the frontend",
+      "description": "As a protection engineer, I want to see the generated time-current characteristic curves in the app so I can inspect coordination visually without leaving the single-line workflow.",
+      "acceptanceCriteria": [
+        "Protection coordination results page or panel renders multiple TCC curves on a readable chart",
+        "Curves are labeled by device and setting source",
+        "Users can distinguish overlapping curves through styling or legend support",
+        "The protection coordination view handles empty, loading, error, and content states",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "The chart should support practical engineering review, not just a static screenshot."
+    },
+    {
+      "id": "US-008",
+      "title": "Add protection coordination analysis feedback",
+      "description": "As a protection engineer, I want coordination warnings and analysis feedback so I can identify obvious grading conflicts directly from the study output.",
+      "acceptanceCriteria": [
+        "Protection coordination results include at least basic overlap or ordering warnings for configured devices",
+        "Warnings identify the affected device pair or study segment in clear language",
+        "The UI presents warnings separately from raw curve data",
+        "Unsupported advanced grading checks are clearly marked as out of scope instead of silently omitted",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Start with high-signal warnings; full automatic coordination grading can evolve later."
+    },
+    {
+      "id": "US-009",
+      "title": "Improve reusable network data model for multi-study support",
+      "description": "As a maintainer, I want the shared network model to support load-flow, standards-based short-circuit, and protection coordination inputs cleanly so new studies do not fragment the codebase.",
+      "acceptanceCriteria": [
+        "Shared frontend payload mapping supports study-specific fields without duplicating the base network model",
+        "Backend request models remain explicit and backward-compatible for existing load-flow use cases",
+        "Adding protection-device data does not break existing saved diagrams unexpectedly",
+        "Typecheck/build passes and backend verification passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "This task keeps the roadmap maintainable as more studies are added."
+    },
+    {
+      "id": "US-010",
+      "title": "Harden validation and user feedback for advanced studies",
+      "description": "As a user, I want clear validation and error feedback when running advanced studies so I can correct bad inputs without guessing.",
+      "acceptanceCriteria": [
+        "Short-circuit and protection coordination studies reject incomplete or invalid inputs with specific messages",
+        "Validation covers missing buses, unsupported device assignments, and impossible study configurations",
+        "Frontend shows these failures without crashing or leaving stale results in place",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "Keep engineering limitations explicit and user-facing."
+    },
+    {
+      "id": "US-011",
+      "title": "Add representative study verification coverage",
+      "description": "As a maintainer, I want representative verification coverage for load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination outputs so regressions are caught early.",
+      "acceptanceCriteria": [
+        "Project includes representative automated or scripted verification for all supported study types",
+        "At least one sample network validates ANSI short-circuit behavior",
+        "At least one sample network validates IEC 60909 short-circuit behavior",
+        "At least one sample network validates protection coordination curve generation",
+        "Documented quality checks pass"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Coverage can begin with focused integration-style checks before expanding."
+    }
+  ]
+}

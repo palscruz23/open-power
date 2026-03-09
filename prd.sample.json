@@ -1,0 +1,34 @@
+{
+  "project": "NeuroFuel",
+  "branchName": "ralph/task-priority",
+  "description": "Task Priority System - Add priority levels to tasks",
+  "tasks": [
+    {
+      "id": "task-001",
+      "title": "Add priority field to database",
+      "description": "As a developer, I need to store task priority so it persists across sessions.",
+      "acceptanceCriteria": [
+        "Add priority column to tasks table: 'high' | 'medium' | 'low' (default 'medium')",
+        "Generate and run migration successfully",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Display priority indicator on task cards",
+      "description": "As a user, I want to see task priority at a glance.",
+      "acceptanceCriteria": [
+        "Each task card shows colored priority badge (red=high, yellow=medium, gray=low)",
+        "Priority visible without hovering or clicking",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
