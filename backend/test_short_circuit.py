@@ -84,6 +84,32 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertIsNone(branch['to_ikss_ka'])
         self.assertIsNone(branch['ikss_ka'])
 
+    def test_short_circuit_accepts_protection_device_metadata_without_breaking_results(self):
+        result = calculate_short_circuit(
+            self.make_payload(
+                protection_devices=[
+                    {
+                        'asset_id': 'load-1',
+                        'asset_type': 'load',
+                        'device_type': 'oc_relay',
+                        'name': 'Feeder Relay',
+                        'settings': {
+                            'phase_mode': 'phase',
+                            'curve_family': 'iec_standard_inverse',
+                            'pickup_current_a': 180.0,
+                            'time_dial': 0.35,
+                            'instantaneous_pickup_a': 720.0,
+                            'clearing_time_adder_s': 0.05
+                        }
+                    }
+                ]
+            )
+        )
+
+        self.assertEqual(result['fault']['standard'], 'ansi')
+        self.assertGreater(result['fault_bus']['current_ka'], 0.0)
+        self.assertIn('line-1', result['branches'])
+
 
 if __name__ == '__main__':
     unittest.main()

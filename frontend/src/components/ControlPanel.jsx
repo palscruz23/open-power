@@ -1,5 +1,27 @@
 import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
 
+const PROTECTION_DEVICE_TYPE_OPTIONS = [
+  { value: 'oc_relay', label: 'Overcurrent Relay' },
+  { value: 'recloser', label: 'Recloser' },
+  { value: 'fuse', label: 'Fuse' }
+];
+
+const PROTECTION_CURVE_OPTIONS = [
+  { value: 'iec_standard_inverse', label: 'IEC Standard Inverse' },
+  { value: 'iec_very_inverse', label: 'IEC Very Inverse' },
+  { value: 'ansi_moderately_inverse', label: 'ANSI Moderately Inverse' },
+  { value: 'ansi_very_inverse', label: 'ANSI Very Inverse' },
+  { value: 'ansi_k', label: 'ANSI K Fuse' }
+];
+
+const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
+  'load',
+  'resistive_load',
+  'generator',
+  'utility',
+  'transformer'
+]);
+
 function getShortCircuitCurrentTag(fault) {
   if (!fault) return 'Isc';
   if (fault.standard === 'ansi' && fault.current_type === 'initial_symmetrical') return 'Isym';
@@ -122,6 +144,53 @@ function renderShortCircuitResults(result) {
   );
 }
 
+function renderProtectionResults(result) {
+  const devices = Array.isArray(result?.devices) ? result.devices : [];
+
+  return (
+    <div className="study-result study-result--protection">
+      <h4>Protection Setup Validation</h4>
+      <p className="result-note">{result?.message || 'Protection inputs were validated.'}</p>
+      <div className="result-summary-grid">
+        <div>
+          <span>Status</span>
+          <strong>{result?.status || 'Unknown'}</strong>
+        </div>
+        <div>
+          <span>Configured Devices</span>
+          <strong>{result?.summary?.device_count ?? devices.length}</strong>
+        </div>
+        <div>
+          <span>Coordination Margin</span>
+          <strong>{result?.summary?.coordination_margin_s ?? '-'} s</strong>
+        </div>
+      </div>
+      <div className="result-section">
+        <h5>Accepted Devices</h5>
+        {devices.length > 0 ? (
+          <div className="result-list">
+            {devices.map((device) => (
+              <div className="result-list-row" key={`${device.asset_id}-${device.name}`}>
+                <div>
+                  <strong>{device.name}</strong>
+                  <span>
+                    {device.device_type} on {device.asset_id} ({device.curve_family})
+                  </span>
+                </div>
+                <div>
+                  {device.pickup_current_a} A / TD {device.time_dial}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="result-empty">No protection devices were accepted.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ControlPanel({
   studyType,
   onRunLoadFlow,
@@ -141,11 +210,32 @@ export default function ControlPanel({
   shortCircuitCurrentType,
   onShortCircuitCurrentTypeChange,
   shortCircuitFaultBusId,
-  onShortCircuitFaultBusIdChange
+  onShortCircuitFaultBusIdChange,
+  onRunProtection,
+  protectionDeviceCount
 }) {
   const isLoadFlow = studyType === 'loadflow';
   const isShortCircuit = studyType === 'shortcircuit';
   const isProtection = studyType === 'protection';
+  const selectedNodeSupportsProtection = selectedNode && PROTECTION_ELIGIBLE_NODE_TYPES.has(selectedNode.type);
+  const protection = selectedNodeSupportsProtection ? selectedNode.data.protection || {} : null;
+  const protectionEnabled = Boolean(protection?.enabled);
+
+  const updateProtection = (field, value) => {
+    if (!selectedNodeSupportsProtection) return;
+    onUpdateNode('protection', {
+      phase_mode: 'phase',
+      device_type: 'oc_relay',
+      curve_family: 'iec_standard_inverse',
+      pickup_current_a: '',
+      time_dial: '',
+      instantaneous_pickup_a: '',
+      clearing_time_adder_s: 0,
+      name: `${selectedNode.data.label} Relay`,
+      ...(selectedNode.data.protection || {}),
+      [field]: value
+    });
+  };
 
   const panelTitle = isLoadFlow
     ? 'Load Flow Settings'
@@ -161,7 +251,7 @@ export default function ControlPanel({
       <div className="buttons">
         {isLoadFlow && <button onClick={onRunLoadFlow}>Run Load Flow</button>}
         {isShortCircuit && <button onClick={onRunShortCircuit}>Run Short Circuit</button>}
-        {isProtection && <button disabled>Run Protection Check (Soon)</button>}
+        {isProtection && <button onClick={onRunProtection}>Validate Protection Setup</button>}
       </div>
 
       {isShortCircuit && (
@@ -223,9 +313,10 @@ export default function ControlPanel({
         <div className="editor">
           <h4>Protection Setup</h4>
           <p>
-            Define relay settings and coordination time intervals in this panel. Automated checks are
-            currently being integrated.
+            Attach relays, reclosers, or fuses to loads, sources, and transformers, then validate the
+            structured settings before coordination curves are added in a later study step.
           </p>
+          <p>Configured devices: {protectionDeviceCount}</p>
         </div>
       )}
 
@@ -430,6 +521,137 @@ export default function ControlPanel({
               </label>
             </>
           )}
+
+          {selectedNodeSupportsProtection && (
+            <>
+              <h4>Protection Device</h4>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={protectionEnabled}
+                  onChange={(e) =>
+                    onUpdateNode('protection', {
+                      phase_mode: 'phase',
+                      device_type: 'oc_relay',
+                      curve_family: 'iec_standard_inverse',
+                      pickup_current_a: '',
+                      time_dial: '',
+                      instantaneous_pickup_a: '',
+                      clearing_time_adder_s: 0,
+                      name: `${selectedNode.data.label} Relay`,
+                      ...(selectedNode.data.protection || {}),
+                      enabled: e.target.checked
+                    })
+                  }
+                />
+                Enable protection device on this asset
+              </label>
+              {protectionEnabled && (
+                <>
+                  <label>
+                    Device Name
+                    <input
+                      value={protection?.name ?? `${selectedNode.data.label} Relay`}
+                      onChange={(e) => updateProtection('name', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Device Type
+                    <select
+                      value={protection?.device_type ?? 'oc_relay'}
+                      onChange={(e) => updateProtection('device_type', e.target.value)}
+                    >
+                      {PROTECTION_DEVICE_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Phase Mode
+                    <select
+                      value={protection?.phase_mode ?? 'phase'}
+                      onChange={(e) => updateProtection('phase_mode', e.target.value)}
+                    >
+                      <option value="phase">Phase</option>
+                      <option value="ground">Ground</option>
+                    </select>
+                  </label>
+                  <label>
+                    Curve Family
+                    <select
+                      value={protection?.curve_family ?? 'iec_standard_inverse'}
+                      onChange={(e) => updateProtection('curve_family', e.target.value)}
+                    >
+                      {PROTECTION_CURVE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Pickup Current (A)
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={protection?.pickup_current_a ?? ''}
+                      onChange={(e) =>
+                        updateProtection(
+                          'pickup_current_a',
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Time Dial
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={protection?.time_dial ?? ''}
+                      onChange={(e) =>
+                        updateProtection('time_dial', e.target.value === '' ? '' : Number(e.target.value))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Instantaneous Pickup (A)
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={protection?.instantaneous_pickup_a ?? ''}
+                      onChange={(e) =>
+                        updateProtection(
+                          'instantaneous_pickup_a',
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Clearing Time Adder (s)
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={protection?.clearing_time_adder_s ?? 0}
+                      onChange={(e) =>
+                        updateProtection(
+                          'clearing_time_adder_s',
+                          e.target.value === '' ? '' : Number(e.target.value)
+                        )
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -437,6 +659,8 @@ export default function ControlPanel({
       {result &&
         (isShortCircuit ? (
           renderShortCircuitResults(result)
+        ) : isProtection ? (
+          renderProtectionResults(result)
         ) : (
           <pre className="result">{JSON.stringify(result, null, 2)}</pre>
         ))}

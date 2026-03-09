@@ -59,12 +59,30 @@ class Transformer(BaseModel):
     shift_degree: float = 0.0
 
 
+class ProtectionSettings(BaseModel):
+    phase_mode: Literal['phase', 'ground'] = 'phase'
+    curve_family: str | None = None
+    pickup_current_a: float | None = None
+    time_dial: float | None = None
+    instantaneous_pickup_a: float | None = None
+    clearing_time_adder_s: float = 0.0
+
+
+class ProtectionDevice(BaseModel):
+    asset_id: str
+    asset_type: Literal['load', 'resistive_load', 'generator', 'utility', 'transformer']
+    device_type: Literal['oc_relay', 'recloser', 'fuse'] = 'oc_relay'
+    name: str | None = None
+    settings: ProtectionSettings = Field(default_factory=ProtectionSettings)
+
+
 class NetworkInput(BaseModel):
     buses: List[Bus]
     lines: List[Line] = []
     transformers: List[Transformer] = []
     loads: List[Load] = []
     generators: List[Generator] = []
+    protection_devices: List[ProtectionDevice] = []
 
 
 class ShortCircuitInput(NetworkInput):
@@ -72,6 +90,10 @@ class ShortCircuitInput(NetworkInput):
     fault_bus_id: str
     fault_type: Literal['three_phase', 'single_phase', 'earth_fault'] = 'three_phase'
     current_type: Literal['initial_symmetrical', 'peak', 'thermal_equivalent'] = 'initial_symmetrical'
+
+
+class ProtectionStudyInput(NetworkInput):
+    coordination_margin_s: float = Field(default=0.3, ge=0)
 
 
 app = FastAPI(title='OpenPower Studio API', version='0.1.0')
@@ -345,6 +367,118 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
             }
         }
     }
+
+
+def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, object]]:
+    load_ids = {load.id for load in payload.loads}
+    generator_ids = {generator.id for generator in payload.generators}
+    transformer_ids = {transformer.id for transformer in payload.transformers}
+    known_asset_ids = load_ids | generator_ids | transformer_ids
+
+    if not payload.protection_devices:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                'Add at least one protection device before running protection coordination validation.'
+            )
+        )
+
+    validated_devices: List[Dict[str, object]] = []
+    for device in payload.protection_devices:
+        if device.asset_id not in known_asset_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" references unsupported asset '
+                    f'"{device.asset_id}". Attach devices only to loads, generators, utilities, or transformers.'
+                )
+            )
+
+        if device.asset_type in {'load', 'resistive_load'} and device.asset_id not in load_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Protection device "{device.name or device.asset_id}" must be attached to a load asset.'
+            )
+        if device.asset_type in {'generator', 'utility'} and device.asset_id not in generator_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" must be attached to a generator '
+                    'or utility source asset.'
+                )
+            )
+        if device.asset_type == 'transformer' and device.asset_id not in transformer_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" must be attached to a transformer asset.'
+                )
+            )
+
+        settings = device.settings
+        missing_fields = []
+        curve_family = settings.curve_family.strip() if isinstance(settings.curve_family, str) else ''
+        if not curve_family:
+            missing_fields.append('curve family')
+
+        pickup_current_a = settings.pickup_current_a
+        if pickup_current_a is None or not math.isfinite(pickup_current_a) or pickup_current_a <= 0:
+            missing_fields.append('pickup current')
+
+        time_dial = settings.time_dial
+        if time_dial is None or not math.isfinite(time_dial) or time_dial <= 0:
+            missing_fields.append('time dial')
+
+        instantaneous_pickup_a = settings.instantaneous_pickup_a
+        if (
+            instantaneous_pickup_a is not None
+            and (not math.isfinite(instantaneous_pickup_a) or instantaneous_pickup_a <= 0)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" has an invalid instantaneous pickup '
+                    'current.'
+                )
+            )
+
+        if not math.isfinite(settings.clearing_time_adder_s) or settings.clearing_time_adder_s < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" has an invalid clearing time adder.'
+                )
+            )
+
+        if missing_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" is missing required settings: '
+                    f'{", ".join(missing_fields)}.'
+                )
+            )
+
+        validated_devices.append(
+            {
+                'asset_id': device.asset_id,
+                'asset_type': device.asset_type,
+                'device_type': device.device_type,
+                'name': device.name or device.asset_id,
+                'phase_mode': settings.phase_mode,
+                'curve_family': curve_family,
+                'pickup_current_a': round(float(pickup_current_a), 5),
+                'time_dial': round(float(time_dial), 5),
+                'instantaneous_pickup_a': (
+                    round(float(instantaneous_pickup_a), 5)
+                    if instantaneous_pickup_a is not None
+                    else None
+                ),
+                'clearing_time_adder_s': round(float(settings.clearing_time_adder_s), 5)
+            }
+        )
+
+    return validated_devices
 
 
 @app.post('/api/calculate/load-flow')
@@ -646,4 +780,21 @@ def calculate_short_circuit(payload: ShortCircuitInput):
         'buses': net.res_bus_sc[bus_columns].round(5).to_dict('index')
         if len(net.res_bus_sc) > 0
         else {}
+    }
+
+
+@app.post('/api/calculate/protection-coordination')
+def calculate_protection_coordination(payload: ProtectionStudyInput):
+    validated_devices = validate_protection_study(payload)
+
+    return {
+        'status': 'validated',
+        'message': (
+            'Protection device inputs are valid. Coordination curve generation is not implemented in this release.'
+        ),
+        'summary': {
+            'device_count': len(validated_devices),
+            'coordination_margin_s': round(float(payload.coordination_margin_s), 5)
+        },
+        'devices': validated_devices
     }

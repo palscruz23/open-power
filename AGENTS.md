@@ -84,6 +84,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - result annotation logic
 - persistence sanitization
 - Short-circuit canvas annotation context should stay in transient node fields only; if you add fault metadata for display, update both `sanitizeGraphForPersistence()` and the short-circuit/load-flow reset paths so saved diagrams do not retain study results.
+- Protection-device inputs live under each node's persistent `data.protection` object on protection-eligible assets; if you change the protection model, update both the `ControlPanel.jsx` editor and `LoadFlowStudyPage.jsx` payload mapping together so backend validation receives the same structured fields the UI edits.
 
 When changing backend network models or result payloads, update the frontend
 call sites and renderers in the same task.

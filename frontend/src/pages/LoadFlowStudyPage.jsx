@@ -26,6 +26,13 @@ import { formatCurrentFromKa } from '../utils/unitFormat';
 const API_BASE = 'http://127.0.0.1:8000';
 const STORAGE_KEY_PREFIX = 'openpower:network:';
 const LOAD_FLOW_NODE_TYPES = new Set(['load', 'resistive_load', 'generator', 'utility']);
+const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
+  'load',
+  'resistive_load',
+  'generator',
+  'utility',
+  'transformer'
+]);
 const TRANSIENT_NODE_DATA_KEYS = new Set([
   'isFaulted',
   'isFaultSelected',
@@ -154,6 +161,13 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
   const busNodes = useMemo(() => nodes.filter((n) => n.type === 'bus'), [nodes]);
   const busCount = busNodes.length;
+  const protectionDeviceCount = useMemo(
+    () =>
+      nodes.filter(
+        (node) => PROTECTION_ELIGIBLE_NODE_TYPES.has(node.type) && Boolean(node.data?.protection?.enabled)
+      ).length,
+    [nodes]
+  );
 
   useEffect(() => {
     if (busNodes.length === 0) {
@@ -570,7 +584,45 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       })
       .filter(Boolean);
 
-    return { buses, lines, transformers, loads, generators };
+    const protection_devices = nodes
+      .filter(
+        (node) => PROTECTION_ELIGIBLE_NODE_TYPES.has(node.type) && Boolean(node.data?.protection?.enabled)
+      )
+      .map((node) => {
+        const protection = node.data?.protection || {};
+        const pickupCurrentRaw = Number(protection.pickup_current_a);
+        const timeDialRaw = Number(protection.time_dial);
+        const instantaneousPickupRaw = Number(protection.instantaneous_pickup_a);
+        const clearingTimeAdderRaw = Number(protection.clearing_time_adder_s);
+
+        return {
+          asset_id: node.id,
+          asset_type: node.type,
+          device_type: protection.device_type || 'oc_relay',
+          name:
+            typeof protection.name === 'string' && protection.name.trim().length > 0
+              ? protection.name.trim()
+              : `${node.data?.label || node.id} Relay`,
+          settings: {
+            phase_mode: protection.phase_mode || 'phase',
+            curve_family:
+              typeof protection.curve_family === 'string' ? protection.curve_family.trim() : '',
+            pickup_current_a:
+              Number.isFinite(pickupCurrentRaw) && pickupCurrentRaw > 0 ? pickupCurrentRaw : null,
+            time_dial: Number.isFinite(timeDialRaw) && timeDialRaw > 0 ? timeDialRaw : null,
+            instantaneous_pickup_a:
+              Number.isFinite(instantaneousPickupRaw) && instantaneousPickupRaw > 0
+                ? instantaneousPickupRaw
+                : null,
+            clearing_time_adder_s:
+              Number.isFinite(clearingTimeAdderRaw) && clearingTimeAdderRaw >= 0
+                ? clearingTimeAdderRaw
+                : 0
+          }
+        };
+      });
+
+    return { buses, lines, transformers, loads, generators, protection_devices };
   }, [nodes, edges, resolveConnectedBus]);
 
   const callStudy = useCallback(
@@ -579,13 +631,17 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         setError('');
         setResult(null);
         const payload = mapToPayload();
-        if (studyType === 'protection') {
-          setError('Protection coordination calculations are not yet connected to the backend.');
+        if (studyType === 'protection' && payload.protection_devices.length === 0) {
+          setError('Attach at least one protection device before validating protection coordination inputs.');
           return;
         }
 
         const endpoint =
-          studyType === 'loadflow' ? '/api/calculate/load-flow' : '/api/calculate/short-circuit';
+          studyType === 'loadflow'
+            ? '/api/calculate/load-flow'
+            : studyType === 'shortcircuit'
+              ? '/api/calculate/short-circuit'
+              : '/api/calculate/protection-coordination';
 
         if (studyType === 'shortcircuit') {
           clearShortCircuitAnnotations();
@@ -1516,6 +1572,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         studyType={studyType}
         onRunLoadFlow={() => callStudy('loadflow')}
         onRunShortCircuit={() => callStudy('shortcircuit')}
+        onRunProtection={() => callStudy('protection')}
         selectedNode={selectedNode}
         onUpdateNode={onUpdateNode}
         selectedNodesCount={selectedNodes.length}
@@ -1532,6 +1589,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         onShortCircuitCurrentTypeChange={setShortCircuitCurrentType}
         shortCircuitFaultBusId={shortCircuitFaultBusId}
         onShortCircuitFaultBusIdChange={setShortCircuitFaultBusId}
+        protectionDeviceCount={protectionDeviceCount}
       />
     </div>
   );

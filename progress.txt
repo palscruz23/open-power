@@ -4,6 +4,7 @@
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
+- Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -14,7 +15,6 @@
   - Shared load-flow and short-circuit persistence depends on the `openpower:network:shared` storage key, so study-specific options should not be added to persisted node or edge data.
   - The backend short-circuit contract is defined by `ShortCircuitInput` in `backend/main.py`; adding new study inputs there keeps frontend/backend changes aligned.
   - Checks run this iteration: backend import/smoke check passed; `npm.cmd run build` was attempted but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
-  - Thread URL: unavailable in this Codex session.
 ---
 ## [2026-03-09T14:16:13Z] - US-001 (runner)
 
@@ -27,7 +27,6 @@
   - Backend verification should use direct function calls or the repo `.venv` unless extra test dependencies are installed; the bundled FastAPI environment here does not include `httpx` for `TestClient`.
   - Pandapower branch short-circuit results emit a runtime warning that transformer branch values are beta-quality; keep that limitation explicit when extending branch result displays or tests.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit` passed; load-flow and ANSI short-circuit smoke executions via `.venv\\Scripts\\python.exe` passed.
-  - Thread URL: unavailable in this Codex session.
 ---
 ## 2026-03-10 01:02:20 +10:30 - US-003
 - Implemented IEC 60909 short-circuit result shaping so the backend exposes IEC-specific current labels and method-aware branch result keys for thermal, peak, and initial symmetrical outputs without reusing ANSI-oriented naming.
@@ -37,7 +36,6 @@
   - Short-circuit branch payloads can stay frontend-compatible by preserving `from_current_ka` / `to_current_ka` / `current_ka` while adding `result_key`, `result_label`, and standard-specific branch keys such as `ith_ka`.
   - For non-`ikss` IEC modes, set legacy `ikss_*` aliases to `null` rather than populating them with peak or thermal values; that keeps method-specific semantics explicit without breaking consumers that tolerate missing legacy aliases.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit` passed; load-flow smoke execution via `.venv\\Scripts\\python.exe` passed; IEC 60909 short-circuit smoke execution via `.venv\\Scripts\\python.exe` passed.
-  - Thread URL: unavailable in this Codex session.
 ---
 ## [2026-03-09T14:35:42Z] - US-003 (runner)
 ## 2026-03-10 01:18:52 +10:30 - US-004
@@ -49,5 +47,22 @@
   - Short-circuit UI changes span three frontend surfaces: `LoadFlowStudyPage.jsx` owns reset/state logic, `SymbolNodes.jsx` renders on-canvas fault badges, and `ControlPanel.jsx` is the right place for study-result summaries and limitations.
   - If you add new fault annotation fields, treat them like other transient study outputs and clear them both in short-circuit resets and in the load-flow path so switching studies does not leave stale context behind.
   - Checks run this iteration: `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
-  - Thread URL: unavailable in this Codex session.
+---
+## [2026-03-09T14:51:20Z] - US-004 (runner)
+- Runner executed Codex session for US-004 - Show standard-aware short-circuit results in the frontend
+- Exit code: 0
+- Files changed in working tree after run:
+  - none
+- Latest commit: 83e73f0 feat: [US-004] - [Show standard-aware short-circuit results in the frontend]
+---
+## 2026-03-10 01:27:52 +10:30 - US-005
+- Added structured protection-device editing on protection-eligible nodes in the study editor, including device type, curve family, pickup, time dial, and optional instantaneous settings.
+- Extended the shared frontend/backend network contract with `protection_devices`, wired the protection study page to a backend validation endpoint, and returned a validation summary instead of the old placeholder.
+- Added backend verification for accepted protection-device payloads, missing-setting failures, and short-circuit compatibility with the richer shared model.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_protection.py`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Protection-device settings now live in `selectedNode.data.protection` for eligible asset nodes and are intentionally persisted with the protection diagram; they are not transient study results.
+  - The frontend protection workflow currently validates inputs through `/api/calculate/protection-coordination` and returns accepted-device metadata only; future curve-generation work should extend that endpoint rather than inventing a second protection payload shape.
+  - Because utilities are serialized through the existing `generators` payload list, backend validation has to treat `utility` protection attachments as generator-backed assets even though the frontend node type remains `utility`.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_protection` passed; load-flow, ANSI short-circuit, and protection-validation smoke executions via `.venv\\Scripts\\python.exe` passed; `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
 ---
