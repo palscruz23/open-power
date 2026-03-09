@@ -22,6 +22,21 @@ require_cmd() {
   fi
 }
 
+print_new_progress() {
+  local start_line="$1"
+  if [[ ! -f "$PROGRESS_FILE" ]]; then
+    return
+  fi
+
+  local total_lines
+  total_lines="$(wc -l < "$PROGRESS_FILE")"
+  if [[ "$total_lines" -lt "$start_line" ]]; then
+    return
+  fi
+
+  sed -n "${start_line},\$p" "$PROGRESS_FILE"
+}
+
 read_json() {
   local expr="$1"
   (
@@ -55,13 +70,15 @@ if ! grep -q "^## Codebase Patterns" "$PROGRESS_FILE"; then
   mv "$tmp_file" "$PROGRESS_FILE"
 fi
 
+progress_start_line=$(( $(wc -l < "$PROGRESS_FILE") + 1 ))
+
 branch_name="$(read_json "d.branchName")"
 if [[ -z "$branch_name" ]]; then
   echo "branchName is missing in prd.json" >&2
   exit 1
 fi
 
-next_task_json="$(read_json "(() => { const tasks=(d.tasks||[]).filter(t=>t&&t.passes===false).sort((a,b)=>(a.priority??1e9)-(b.priority??1e9)); return tasks[0]||null; })()")" || true
+next_task_json="$(read_json "(() => { const isImplemented=t=>Boolean(t&&((typeof t.implemented==='boolean'&&t.implemented)||((typeof t.implemented!=='boolean')&&t.passes===true))); const tasks=(d.tasks||[]).filter(t=>t&&!isImplemented(t)).sort((a,b)=>(a.priority??1e9)-(b.priority??1e9)); return tasks[0]||null; })()")" || true
 
 if [[ -z "${next_task_json:-}" || "$next_task_json" == "null" ]]; then
   echo "<promise>COMPLETE</promise>"
@@ -71,11 +88,15 @@ fi
 task_id="$(node -e "const t=$next_task_json;console.log(t.id||'UNKNOWN');")"
 task_title="$(node -e "const t=$next_task_json;console.log(t.title||'Untitled');")"
 
+echo "[ralph] Working on $task_id - $task_title"
+
 current_branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
 if [[ "$current_branch" != "$branch_name" ]]; then
   if git -C "$ROOT_DIR" show-ref --verify --quiet "refs/heads/$branch_name"; then
+    echo "[ralph] Checking out existing branch $branch_name"
     git -C "$ROOT_DIR" checkout "$branch_name"
   else
+    echo "[ralph] Creating branch $branch_name from main"
     git -C "$ROOT_DIR" checkout -b "$branch_name" main
   fi
 fi
@@ -96,47 +117,24 @@ Implement exactly one story this run:
 Rules for this run:
 - Work only on this story.
 - Follow all instructions in ralph.md.
-- Update prd.json: set only this story's \`passes\` to true when done.
+- Update prd.json: set only this story's \`implemented\` to true when done.
+- Never set \`accepted\`; that field is reserved for human review.
 - Append an entry to progress.txt using the required format.
-- If all tasks become complete, output: <promise>COMPLETE</promise>
+- If all stories are implemented, output: <promise>COMPLETE</promise>
 EOF
 
-echo "Running Codex for $task_id - $task_title"
 set +e
+echo "[ralph] Launching Codex"
 codex exec --full-auto -C "$ROOT_DIR" "$(cat "$tmp_prompt")"
 codex_exit=$?
 set -e
 rm -f "$tmp_prompt"
 
-timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-changed_files="$(git -C "$ROOT_DIR" status --short | awk '{print $2}')"
-last_commit="$(git -C "$ROOT_DIR" log -1 --pretty=format:'%h %s' 2>/dev/null || true)"
-if [[ -z "$last_commit" ]]; then
-  last_commit="none"
-fi
-
-{
-  echo "## [$timestamp] - $task_id (runner)"
-  echo "- Runner executed Codex session for $task_id - $task_title"
-  echo "- Exit code: $codex_exit"
-  echo "- Files changed in working tree after run:"
-  if [[ -n "$changed_files" ]]; then
-    while IFS= read -r f; do
-      [[ -n "$f" ]] && echo "  - $f"
-    done <<< "$changed_files"
-  else
-    echo "  - none"
-  fi
-  echo "- Latest commit: $last_commit"
-  echo "---"
-} >> "$PROGRESS_FILE"
+print_new_progress "$progress_start_line"
 
 if [[ $codex_exit -ne 0 ]]; then
   echo "Codex session exited with code $codex_exit" >&2
   exit "$codex_exit"
 fi
 
-echo "Pushing branch $branch_name to origin"
 git -C "$ROOT_DIR" push -u origin "$branch_name"
-
-echo "Completed session for $task_id"

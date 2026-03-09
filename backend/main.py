@@ -134,11 +134,18 @@ def build_network(payload: SharedNetworkInput, use_motor_elements: bool = False)
     bus_map: Dict[str, int] = {}
 
     for bus in payload.buses:
+        if bus.id in bus_map:
+            raise HTTPException(status_code=400, detail=f'Duplicate bus id "{bus.id}" is not allowed.')
         bus_map[bus.id] = pp.create_bus(net, vn_kv=bus.vn_kv, name=bus.name)
 
     for line in payload.lines:
         if line.from_bus not in bus_map or line.to_bus not in bus_map:
             raise HTTPException(status_code=400, detail=f'Invalid line bus reference: {line.id}')
+        if line.from_bus == line.to_bus:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Line {line.id} must connect two distinct buses.'
+            )
         pp.create_line_from_parameters(
             net,
             from_bus=bus_map[line.from_bus],
@@ -390,12 +397,21 @@ def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, o
     validated_devices: List[Dict[str, object]] = []
     for device in payload.protection_devices:
         if device.asset_id not in known_asset_ids:
+            if device.asset_type == 'transformer':
+                detail = (
+                    f'Protection device "{device.name or device.asset_id}" references transformer '
+                    f'"{device.asset_id}", but that transformer is not available for coordination. '
+                    'Connect the transformer to two buses before assigning protection.'
+                )
+            else:
+                detail = (
+                    f'Protection device "{device.name or device.asset_id}" references asset '
+                    f'"{device.asset_id}", but that asset is not connected to a bus in the current study network. '
+                    'Connect the asset before running protection coordination.'
+                )
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f'Protection device "{device.name or device.asset_id}" references unsupported asset '
-                    f'"{device.asset_id}". Attach devices only to loads, generators, utilities, or transformers.'
-                )
+                detail=detail
             )
 
         if device.asset_type in {'load', 'resistive_load'} and device.asset_id not in load_ids:
@@ -420,6 +436,14 @@ def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, o
             )
 
         settings = device.settings
+        if settings.phase_mode != 'phase':
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{device.name or device.asset_id}" uses {settings.phase_mode} mode, '
+                    'but protection coordination currently supports phase devices only.'
+                )
+            )
         missing_fields = []
         curve_family = settings.curve_family.strip() if isinstance(settings.curve_family, str) else ''
         if not curve_family:
