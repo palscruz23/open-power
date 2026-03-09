@@ -1,6 +1,6 @@
 {
   "project": "OpenPower Studio",
-  "branchName": "roadmap/review-gated",
+  "branchPrefix": "review",
   "description": "OpenPower Studio roadmap focused on standards-based short-circuit analysis, protection coordination, and arc-flash calculations, while preserving the existing local single-line editor and expanding the shared study workflow with dedicated analysis tabs.",
   "tasks": [
     {

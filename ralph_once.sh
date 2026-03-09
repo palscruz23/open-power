@@ -72,9 +72,9 @@ fi
 
 progress_start_line=$(( $(wc -l < "$PROGRESS_FILE") + 1 ))
 
-branch_name="$(read_json "d.branchName")"
-if [[ -z "$branch_name" ]]; then
-  echo "branchName is missing in prd.json" >&2
+branch_prefix="$(read_json "d.branchPrefix ?? d.branchName")"
+if [[ -z "$branch_prefix" ]]; then
+  echo "branchPrefix is missing in prd.json" >&2
   exit 1
 fi
 
@@ -87,16 +87,16 @@ fi
 
 task_id="$(node -e "const t=$next_task_json;console.log(t.id||'UNKNOWN');")"
 task_title="$(node -e "const t=$next_task_json;console.log(t.title||'Untitled');")"
+task_slug="$(node -e "const t=$next_task_json; const slug=String(t.title||'untitled').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').replace(/-+/g,'-').slice(0,48) || 'untitled'; console.log(slug);")"
+branch_name="${branch_prefix}/${task_id,,}-${task_slug}"
 
-echo "[ralph] Working on $task_id - $task_title"
+echo "[ralph] $task_id - $task_title"
 
 current_branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
 if [[ "$current_branch" != "$branch_name" ]]; then
   if git -C "$ROOT_DIR" show-ref --verify --quiet "refs/heads/$branch_name"; then
-    echo "[ralph] Checking out existing branch $branch_name"
     git -C "$ROOT_DIR" checkout "$branch_name"
   else
-    echo "[ralph] Creating branch $branch_name from main"
     git -C "$ROOT_DIR" checkout -b "$branch_name" main
   fi
 fi
@@ -112,6 +112,7 @@ cat >> "$tmp_prompt" <<EOF
 Implement exactly one story this run:
 - Story ID: $task_id
 - Story Title: $task_title
+- Story Branch: $branch_name
 - Story JSON: $next_task_json
 
 Rules for this run:
@@ -121,10 +122,16 @@ Rules for this run:
 - Never set \`accepted\`; that field is reserved for human review.
 - Append an entry to progress.txt using the required format.
 - If all stories are implemented, output: <promise>COMPLETE</promise>
+- Be terse in commentary and final output.
+- Keep progress updates to at most 2 short sentences.
+- Do not restate the task after starting.
+- Do not explain routine file reads, searches, or obvious edits.
+- Mention only blockers, implementation decisions, verification results, and concrete outcomes.
+- Keep the final response under 6 lines unless there is a blocker or failed check that requires more detail.
 EOF
 
 set +e
-echo "[ralph] Launching Codex"
+echo "[ralph] Launching"
 codex exec --full-auto -C "$ROOT_DIR" "$(cat "$tmp_prompt")"
 codex_exit=$?
 set -e

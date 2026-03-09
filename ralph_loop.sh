@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ONCE_SCRIPT="$ROOT_DIR/ralph_once.sh"
 PRD_FILE="$ROOT_DIR/prd.json"
-MAX_ITERATIONS=10
+MAX_ITERATIONS=2
 
 # Each successful loop iteration runs ralph_once.sh, which commits and pushes
 # the active PRD branch to origin.
@@ -44,7 +44,7 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
     break
   fi
 
-  echo "[ralph] Iteration $iteration/$MAX_ITERATIONS starting ($remaining task(s) remaining)"
+  echo "[ralph] Iteration $iteration/$MAX_ITERATIONS ($remaining remaining)"
   bash "$ONCE_SCRIPT"
 
   remaining_after="$(remaining_tasks)"
@@ -53,7 +53,6 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
     break
   fi
 
-  echo "[ralph] Iteration $iteration finished ($remaining_after task(s) remaining)"
   iteration=$((iteration + 1))
 done
 
