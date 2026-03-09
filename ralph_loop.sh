@@ -71,6 +71,7 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
     break
   fi
 
+  echo "[ralph] Iteration $iteration finished ($remaining_after task(s) remaining)"
   iteration=$((iteration + 1))
 done
 

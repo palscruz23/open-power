@@ -61,6 +61,28 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('only three-phase faults', context.exception.detail)
 
+    def test_short_circuit_rejects_impossible_self_connected_line(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_short_circuit(
+                self.make_payload(
+                    lines=[
+                        {
+                            'id': 'line-1',
+                            'from_bus': 'bus-2',
+                            'to_bus': 'bus-2',
+                            'length_km': 1.0,
+                            'r_ohm_per_km': 0.08,
+                            'x_ohm_per_km': 0.12,
+                            'c_nf_per_km': 10.0,
+                            'max_i_ka': 1.0
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('must connect two distinct buses', context.exception.detail)
+
     def test_iec_60909_thermal_results_use_iec_specific_labels_and_branch_keys(self):
         result = calculate_short_circuit(
             self.make_payload(standard='iec_60909', current_type='thermal_equivalent')

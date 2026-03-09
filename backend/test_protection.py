@@ -157,6 +157,58 @@ class ProtectionCoordinationTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('missing required settings', context.exception.detail)
 
+    def test_protection_coordination_rejects_disconnected_asset_assignment(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_protection_coordination(
+                self.make_payload(
+                    protection_devices=[
+                        {
+                            'asset_id': 'missing-load',
+                            'asset_type': 'load',
+                            'device_type': 'oc_relay',
+                            'name': 'Detached Relay',
+                            'settings': {
+                                'phase_mode': 'phase',
+                                'curve_family': 'iec_standard_inverse',
+                                'pickup_current_a': 180.0,
+                                'time_dial': 0.4,
+                                'instantaneous_pickup_a': 600.0,
+                                'clearing_time_adder_s': 0.05
+                            }
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('not connected to a bus', context.exception.detail)
+
+    def test_protection_coordination_rejects_unsupported_ground_mode(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_protection_coordination(
+                self.make_payload(
+                    protection_devices=[
+                        {
+                            'asset_id': 'load-1',
+                            'asset_type': 'load',
+                            'device_type': 'oc_relay',
+                            'name': 'Ground Relay',
+                            'settings': {
+                                'phase_mode': 'ground',
+                                'curve_family': 'iec_standard_inverse',
+                                'pickup_current_a': 180.0,
+                                'time_dial': 0.4,
+                                'instantaneous_pickup_a': 600.0,
+                                'clearing_time_adder_s': 0.05
+                            }
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('supports phase devices only', context.exception.detail)
+
     def test_protection_coordination_rejects_insufficient_fault_current_range(self):
         with self.assertRaises(HTTPException) as context:
             calculate_protection_coordination(
