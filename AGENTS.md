@@ -83,6 +83,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - payload mapping
 - result annotation logic
 - persistence sanitization
+- Short-circuit canvas annotation context should stay in transient node fields only; if you add fault metadata for display, update both `sanitizeGraphForPersistence()` and the short-circuit/load-flow reset paths so saved diagrams do not retain study results.
 
 When changing backend network models or result payloads, update the frontend
 call sites and renderers in the same task.

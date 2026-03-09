@@ -1,3 +1,127 @@
+import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
+
+function getShortCircuitCurrentTag(fault) {
+  if (!fault) return 'Isc';
+  if (fault.standard === 'ansi' && fault.current_type === 'initial_symmetrical') return 'Isym';
+  if (fault.current_result_key === 'ikss_ka') return 'Ikss';
+  if (fault.current_result_key === 'ip_ka') return 'Ip';
+  if (fault.current_result_key === 'ith_ka') return 'Ith';
+  return 'Isc';
+}
+
+function formatBranchEndpoint(branches, branchId) {
+  const branch = branches?.[branchId];
+  if (!branch) return branchId;
+  const fromBus = branch.from_bus_id || '?';
+  const toBus = branch.to_bus_id || '?';
+  return `${fromBus} -> ${toBus}`;
+}
+
+function renderShortCircuitResults(result) {
+  const fault = result?.fault;
+  const faultBus = result?.fault_bus;
+  const limitations = Array.isArray(fault?.limitations) ? fault.limitations : [];
+  const branches = Object.entries(result?.branches || {});
+  const branchRows = branches
+    .map(([branchId, branch]) => {
+      const preferredValue =
+        branch?.[branch?.result_key] ??
+        branch?.current_ka ??
+        branch?.contribution_ka ??
+        branch?.from_current_ka ??
+        branch?.to_current_ka;
+      const numericValue = Number(preferredValue);
+      return Number.isFinite(numericValue) && numericValue > 0
+        ? {
+            branchId,
+            endpoint: formatBranchEndpoint(result?.branches, branchId),
+            label: branch?.result_label || fault?.current_type_label || 'Short-circuit current',
+            currentKa: numericValue
+          }
+        : {
+            branchId,
+            endpoint: formatBranchEndpoint(result?.branches, branchId),
+            label: branch?.result_label || fault?.current_type_label || 'Short-circuit current',
+            currentKa: null
+          };
+    })
+    .slice(0, 8);
+  const currentTag = getShortCircuitCurrentTag(fault);
+
+  return (
+    <div className="study-result study-result--shortcircuit">
+      <h4>Short-Circuit Results</h4>
+      <div className="result-summary-grid">
+        <div>
+          <span>Standard</span>
+          <strong>{fault?.standard_label || 'Unknown'}</strong>
+        </div>
+        <div>
+          <span>Current Type</span>
+          <strong>
+            {currentTag}
+            {fault?.current_type_label ? ` - ${fault.current_type_label}` : ''}
+          </strong>
+        </div>
+        <div>
+          <span>Fault Bus</span>
+          <strong>{fault?.bus_id || '-'}</strong>
+        </div>
+        <div>
+          <span>Fault Current</span>
+          <strong>
+            {faultBus?.current_ka != null ? formatCurrentFromKa(faultBus.current_ka) : 'Not available'}
+          </strong>
+        </div>
+        <div>
+          <span>Voltage Base</span>
+          <strong>
+            {faultBus?.voltage_level_kv != null
+              ? formatVoltageFromKv(faultBus.voltage_level_kv)
+              : 'Not available'}
+          </strong>
+        </div>
+      </div>
+
+      {fault?.engine_note && <p className="result-note">{fault.engine_note}</p>}
+
+      <div className="result-section">
+        <h5>Branch Contributions</h5>
+        {branchRows.length > 0 ? (
+          <div className="result-list">
+            {branchRows.map((branch) => (
+              <div className="result-list-row" key={branch.branchId}>
+                <div>
+                  <strong>{branch.endpoint}</strong>
+                  <span>{branch.label}</span>
+                </div>
+                <div>{branch.currentKa != null ? formatCurrentFromKa(branch.currentKa) : 'Not available'}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="result-empty">
+            Branch contribution values were not returned for this study case.
+          </p>
+        )}
+      </div>
+
+      <div className="result-section">
+        <h5>Limitations</h5>
+        {limitations.length > 0 ? (
+          <ul className="result-limitations">
+            {limitations.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="result-empty">No standard-specific limitations were reported for this result.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ControlPanel({
   studyType,
   onRunLoadFlow,
@@ -310,7 +434,12 @@ export default function ControlPanel({
       )}
 
       {error && <pre className="error">{error}</pre>}
-      {result && <pre className="result">{JSON.stringify(result, null, 2)}</pre>}
+      {result &&
+        (isShortCircuit ? (
+          renderShortCircuitResults(result)
+        ) : (
+          <pre className="result">{JSON.stringify(result, null, 2)}</pre>
+        ))}
     </section>
   );
 }

@@ -3,6 +3,7 @@
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
+- Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -39,3 +40,14 @@
   - Thread URL: unavailable in this Codex session.
 ---
 ## [2026-03-09T14:35:42Z] - US-003 (runner)
+## 2026-03-10 01:18:52 +10:30 - US-004
+- Replaced the raw short-circuit JSON dump with a standard-aware results panel that shows the selected standard, current-type context, branch contribution summaries, and explicit limitation messaging.
+- Added transient fault context labels to canvas bus annotations and short-circuit branch labels so ANSI and IEC 60909 runs stay readable without persisting study results.
+- Cleared prior short-circuit annotations before each new short-circuit run and documented the transient fault-metadata pattern in `AGENTS.md`.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `frontend/src/components/SymbolNodes.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Short-circuit UI changes span three frontend surfaces: `LoadFlowStudyPage.jsx` owns reset/state logic, `SymbolNodes.jsx` renders on-canvas fault badges, and `ControlPanel.jsx` is the right place for study-result summaries and limitations.
+  - If you add new fault annotation fields, treat them like other transient study outputs and clear them both in short-circuit resets and in the load-flow path so switching studies does not leave stale context behind.
+  - Checks run this iteration: `npm.cmd run build` attempted from `frontend/` but failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+  - Thread URL: unavailable in this Codex session.
+---

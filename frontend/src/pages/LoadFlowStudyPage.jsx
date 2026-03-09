@@ -32,11 +32,21 @@ const TRANSIENT_NODE_DATA_KEYS = new Set([
   'faultCurrentKa',
   'faultVoltageKv',
   'faultCurrentLabel',
+  'faultContextLabel',
   'loadFlowCurrentKa',
   'loadFlowVoltageKv',
   'loadFlowIncomingCurrentKa',
   'loadFlowOutgoingCurrentKa'
 ]);
+
+function getShortCircuitCurrentTag(fault) {
+  if (!fault) return 'Isc';
+  if (fault.standard === 'ansi' && fault.current_type === 'initial_symmetrical') return 'Isym';
+  if (fault.current_result_key === 'ikss_ka') return 'Ikss';
+  if (fault.current_result_key === 'ip_ka') return 'Ip';
+  if (fault.current_result_key === 'ith_ka') return 'Ith';
+  return 'Isc';
+}
 
 function getStorageKey(studyType) {
   if (studyType === 'loadflow' || studyType === 'shortcircuit') {
@@ -234,6 +244,33 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     );
   }, [setNodes, setEdges]);
 
+  const clearShortCircuitAnnotations = useCallback(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          isFaulted: false,
+          faultCurrentKa: undefined,
+          faultVoltageKv: undefined,
+          faultCurrentLabel: undefined,
+          faultContextLabel: undefined
+        }
+      }))
+    );
+    setEdges((currentEdges) =>
+      currentEdges.map((edge) => ({
+        ...edge,
+        label: undefined,
+        labelStyle: undefined,
+        labelShowBg: undefined,
+        markerStart: undefined,
+        markerEnd: undefined,
+        style: { stroke: '#b8bec7', strokeWidth: 3 }
+      }))
+    );
+  }, [setNodes, setEdges]);
+
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
@@ -397,6 +434,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             faultCurrentKa: undefined,
             faultVoltageKv: undefined,
             faultCurrentLabel: undefined,
+            faultContextLabel: undefined,
             loadFlowCurrentKa: undefined,
             loadFlowVoltageKv: undefined,
             loadFlowIncomingCurrentKa: undefined,
@@ -550,6 +588,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           studyType === 'loadflow' ? '/api/calculate/load-flow' : '/api/calculate/short-circuit';
 
         if (studyType === 'shortcircuit') {
+          clearShortCircuitAnnotations();
           if (!shortCircuitFaultBusId) {
             setError('Select a fault bus before running short-circuit analysis.');
             return;
@@ -567,7 +606,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           const faultBusId = response.data?.fault?.bus_id;
           const currentKa = response.data?.fault_bus?.current_ka;
           const voltageKv = response.data?.fault_bus?.voltage_level_kv;
-          const currentTypeLabel = response.data?.fault?.current_type_label || 'Short-circuit current';
+          const currentTypeTag = getShortCircuitCurrentTag(response.data?.fault);
+          const standardLabel = response.data?.fault?.standard_label || 'Short Circuit';
+          const faultContextLabel = `${standardLabel} ${currentTypeTag}`;
           const branchResults = response.data?.branches || {};
           const motorContributions = response.data?.motor_contributions || {};
           const nodeTypeById = new Map(nodes.map((node) => [node.id, node.type]));
@@ -667,7 +708,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                     isFaulted: true,
                     faultCurrentKa: currentKa,
                     faultVoltageKv: voltageKv,
-                    faultCurrentLabel: currentTypeLabel
+                    faultCurrentLabel: currentTypeTag,
+                    faultContextLabel
                   }
                 };
               }
@@ -679,6 +721,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                   faultCurrentKa: undefined,
                   faultVoltageKv: undefined,
                   faultCurrentLabel: undefined,
+                  faultContextLabel: undefined,
                   loadFlowCurrentKa: undefined,
                   loadFlowVoltageKv: undefined,
                   loadFlowIncomingCurrentKa: undefined,
@@ -798,7 +841,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                 ...edge,
                 label:
                   shouldShowContributionLabel
-                    ? `${arrowGlyph} ${formatCurrentFromKa(effectiveContributionKa)}`
+                    ? `${arrowGlyph} ${currentTypeTag} ${formatCurrentFromKa(effectiveContributionKa)}`
                     : undefined,
                 labelStyle:
                   shouldShowContributionLabel
@@ -875,6 +918,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                     faultCurrentKa: undefined,
                     faultVoltageKv: undefined,
                     faultCurrentLabel: undefined,
+                    faultContextLabel: undefined,
                     loadFlowVoltageKv: busResults[node.id]?.vm_kv ?? undefined,
                     loadFlowCurrentKa: undefined,
                     loadFlowIncomingCurrentKa: 0,
@@ -1012,6 +1056,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       shortCircuitFaultType,
       shortCircuitCurrentType,
       clearLoadFlowAnnotations,
+      clearShortCircuitAnnotations,
       edges,
       nodes
     ]

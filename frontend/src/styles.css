@@ -447,6 +447,12 @@ body {
   color: #642a26;
 }
 
+.fault-context {
+  margin-bottom: 0.1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .loadflow-metrics {
   margin-top: 0.2rem;
   padding: 0.3rem 0.45rem;
@@ -502,7 +508,8 @@ body {
   color: #7a1c14;
   font-size: 0.67rem;
   line-height: 1.25;
-  white-space: nowrap;
+  max-width: 180px;
+  white-space: normal;
 }
 
 .buttons {
@@ -547,6 +554,90 @@ pre {
 
 .error {
   background: #611717;
+}
+
+.study-result {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px solid #d8dee8;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #122033;
+}
+
+.study-result h4,
+.study-result h5 {
+  margin: 0 0 0.6rem;
+}
+
+.result-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.result-summary-grid div {
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #d8dee8;
+}
+
+.result-summary-grid span {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  color: #526173;
+}
+
+.result-summary-grid strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.result-note,
+.result-empty {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  color: #48576a;
+}
+
+.result-section + .result-section {
+  margin-top: 0.9rem;
+}
+
+.result-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.result-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #d8dee8;
+}
+
+.result-list-row strong,
+.result-list-row span {
+  display: block;
+}
+
+.result-list-row span {
+  margin-top: 0.15rem;
+  font-size: 0.74rem;
+  color: #526173;
+}
+
+.result-limitations {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #48576a;
 }
 
 .react-flow__edge-path {

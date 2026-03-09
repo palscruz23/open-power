@@ -93,6 +93,7 @@ function NodeShell({
       <div className="symbol-label">{data.label}</div>
       {hasFaultResult && (
         <div className="fault-metrics">
+          {data?.faultContextLabel && <div className="fault-context">{data.faultContextLabel}</div>}
           <div>{data?.faultCurrentLabel || 'Isc'}: {formatCurrentFromKa(data.faultCurrentKa)}</div>
           <div>Vn: {formatVoltageFromKv(data.faultVoltageKv)}</div>
         </div>
@@ -163,6 +164,7 @@ export function BusNode({ data }) {
       )}
       {hasFaultResult && (
         <div className="fault-metrics fault-metrics--bus-side">
+          {data?.faultContextLabel && <div className="fault-context">{data.faultContextLabel}</div>}
           <div>{data?.faultCurrentLabel || 'Isc'} {formatCurrentFromKa(data.faultCurrentKa)}</div>
           <div>Vn {formatVoltageFromKv(data.faultVoltageKv)}</div>
         </div>
