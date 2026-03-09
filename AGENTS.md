@@ -123,6 +123,10 @@ Rules:
   intentionally changes that contract.
 - When adding study inputs, add validation close to the model or network-build
   path rather than burying it in calculation code.
+- When extending short-circuit results, preserve the generic `current_ka`
+  aliases the frontend already renders and add method-aware `result_key` /
+  `result_label` metadata or standard-specific fields alongside them rather
+  than overloading `ikss_*` names.
 
 Transformer, generator, and short-circuit changes usually require coordinated
 frontend and backend updates. Do not change only one side unless the task is

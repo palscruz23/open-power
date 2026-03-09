@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from backend.main import ShortCircuitInput, calculate_short_circuit
 
 
-class ShortCircuitAnsiTests(unittest.TestCase):
+class ShortCircuitTests(unittest.TestCase):
     def make_payload(self, **overrides):
         payload = {
             'standard': 'ansi',
@@ -60,6 +60,29 @@ class ShortCircuitAnsiTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('only three-phase faults', context.exception.detail)
+
+    def test_iec_60909_thermal_results_use_iec_specific_labels_and_branch_keys(self):
+        result = calculate_short_circuit(
+            self.make_payload(standard='iec_60909', current_type='thermal_equivalent')
+        )
+
+        self.assertEqual(result['fault']['standard'], 'iec_60909')
+        self.assertEqual(result['fault']['standard_label'], 'IEC 60909')
+        self.assertEqual(result['fault']['current_type_label'], 'Thermal equivalent current')
+        self.assertEqual(result['fault']['current_result_key'], 'ith_ka')
+        self.assertEqual(result['fault']['limitations'], [])
+        self.assertGreater(result['fault_bus']['current_ka'], 0.0)
+
+        branch = result['branches']['line-1']
+        self.assertEqual(branch['result_key'], 'ith_ka')
+        self.assertEqual(branch['result_label'], 'Thermal equivalent current')
+        self.assertGreater(branch['contribution_ka'], 0.0)
+        self.assertIsNotNone(branch['from_ith_ka'])
+        self.assertIsNotNone(branch['to_ith_ka'])
+        self.assertIsNotNone(branch['ith_ka'])
+        self.assertIsNone(branch['from_ikss_ka'])
+        self.assertIsNone(branch['to_ikss_ka'])
+        self.assertIsNone(branch['ikss_ka'])
 
 
 if __name__ == '__main__':

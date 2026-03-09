@@ -274,6 +274,9 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
                     'trafo_to_candidates': ['ikss_lv_ka', 'ikss_ka_lv', 'ikss_ka'],
                     'trafo_mid_candidates': ['ikss_ka'],
                     'result_key': 'ikss_ka',
+                    'branch_from_result_key': 'from_ikss_ka',
+                    'branch_to_result_key': 'to_ikss_ka',
+                    'branch_result_key': 'ikss_ka',
                     'label': 'ANSI symmetrical RMS current'
                 },
                 'peak': {
@@ -285,6 +288,9 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
                     'trafo_to_candidates': ['ip_lv_ka', 'ip_ka_lv', 'ip_ka', 'ikss_lv_ka', 'ikss_ka'],
                     'trafo_mid_candidates': ['ip_ka', 'ikss_ka'],
                     'result_key': 'ip_ka',
+                    'branch_from_result_key': 'from_ip_ka',
+                    'branch_to_result_key': 'to_ip_ka',
+                    'branch_result_key': 'ip_ka',
                     'label': 'ANSI peak making current'
                 }
             }
@@ -304,6 +310,9 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
                 'trafo_to_candidates': ['ikss_lv_ka', 'ikss_ka_lv', 'ikss_ka'],
                 'trafo_mid_candidates': ['ikss_ka'],
                 'result_key': 'ikss_ka',
+                'branch_from_result_key': 'from_ikss_ka',
+                'branch_to_result_key': 'to_ikss_ka',
+                'branch_result_key': 'ikss_ka',
                 'label': 'Initial symmetrical current'
             },
             'peak': {
@@ -315,6 +324,9 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
                 'trafo_to_candidates': ['ip_lv_ka', 'ip_ka_lv', 'ip_ka', 'ikss_lv_ka', 'ikss_ka'],
                 'trafo_mid_candidates': ['ip_ka', 'ikss_ka'],
                 'result_key': 'ip_ka',
+                'branch_from_result_key': 'from_ip_ka',
+                'branch_to_result_key': 'to_ip_ka',
+                'branch_result_key': 'ip_ka',
                 'label': 'Peak short-circuit current'
             },
             'thermal_equivalent': {
@@ -326,6 +338,9 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
                 'trafo_to_candidates': ['ith_lv_ka', 'ith_ka_lv', 'ith_ka', 'ikss_lv_ka', 'ikss_ka'],
                 'trafo_mid_candidates': ['ith_ka', 'ikss_ka'],
                 'result_key': 'ith_ka',
+                'branch_from_result_key': 'from_ith_ka',
+                'branch_to_result_key': 'to_ith_ka',
+                'branch_result_key': 'ith_ka',
                 'label': 'Thermal equivalent current'
             }
         }
@@ -502,6 +517,46 @@ def calculate_short_circuit(payload: ShortCircuitInput):
                     return numeric
         return None
 
+    def make_branch_result(
+        from_bus_id: str,
+        to_bus_id: str,
+        current_from: float | None,
+        current_to: float | None,
+        current_mid: float | None
+    ) -> Dict[str, float | str | None]:
+        candidates = [
+            abs(current)
+            for current in [current_from, current_to, current_mid]
+            if current is not None and math.isfinite(current)
+        ]
+        contribution_ka = max(candidates) if candidates else 0.0
+
+        result = {
+            'from_bus_id': from_bus_id,
+            'to_bus_id': to_bus_id,
+            'from_current_ka': round(float(current_from), 5) if current_from is not None else None,
+            'to_current_ka': round(float(current_to), 5) if current_to is not None else None,
+            'current_ka': round(float(current_mid), 5) if current_mid is not None else None,
+            'result_key': selected_current_cfg['branch_result_key'],
+            'result_label': selected_current_cfg['label'],
+            'contribution_ka': round(float(contribution_ka), 5)
+        }
+
+        result[selected_current_cfg['branch_from_result_key']] = result['from_current_ka']
+        result[selected_current_cfg['branch_to_result_key']] = result['to_current_ka']
+        result[selected_current_cfg['branch_result_key']] = result['current_ka']
+
+        if selected_current_cfg['branch_result_key'] != 'ikss_ka':
+            result['from_ikss_ka'] = None
+            result['to_ikss_ka'] = None
+            result['ikss_ka'] = None
+        else:
+            result['from_ikss_ka'] = result['from_current_ka']
+            result['to_ikss_ka'] = result['to_current_ka']
+            result['ikss_ka'] = result['current_ka']
+
+        return result
+
     branches: Dict[str, Dict[str, float | str | None]] = {}
     if hasattr(net, 'res_line_sc') and len(net.res_line_sc) > 0:
         for line_index, row in net.res_line_sc.iterrows():
@@ -512,25 +567,13 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             current_from = read_float(row, selected_current_cfg['from_candidates'])
             current_to = read_float(row, selected_current_cfg['to_candidates'])
             current_mid = read_float(row, selected_current_cfg['mid_candidates'])
-
-            candidates = [
-                abs(current)
-                for current in [current_from, current_to, current_mid]
-                if current is not None and math.isfinite(current)
-            ]
-            contribution_ka = max(candidates) if candidates else 0.0
-
-            branches[line_name] = {
-                'from_bus_id': index_to_bus_id.get(from_bus_idx, ''),
-                'to_bus_id': index_to_bus_id.get(to_bus_idx, ''),
-                'from_current_ka': round(float(current_from), 5) if current_from is not None else None,
-                'to_current_ka': round(float(current_to), 5) if current_to is not None else None,
-                'current_ka': round(float(current_mid), 5) if current_mid is not None else None,
-                'from_ikss_ka': round(float(current_from), 5) if current_from is not None else None,
-                'to_ikss_ka': round(float(current_to), 5) if current_to is not None else None,
-                'ikss_ka': round(float(current_mid), 5) if current_mid is not None else None,
-                'contribution_ka': round(float(contribution_ka), 5)
-            }
+            branches[line_name] = make_branch_result(
+                index_to_bus_id.get(from_bus_idx, ''),
+                index_to_bus_id.get(to_bus_idx, ''),
+                current_from,
+                current_to,
+                current_mid
+            )
 
     if hasattr(net, 'res_trafo_sc') and len(net.res_trafo_sc) > 0:
         for trafo_index, row in net.res_trafo_sc.iterrows():
@@ -542,25 +585,13 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             current_from = read_float(row, selected_current_cfg['trafo_from_candidates'])
             current_to = read_float(row, selected_current_cfg['trafo_to_candidates'])
             current_mid = read_float(row, selected_current_cfg['trafo_mid_candidates'])
-
-            candidates = [
-                abs(current)
-                for current in [current_from, current_to, current_mid]
-                if current is not None and math.isfinite(current)
-            ]
-            contribution_ka = max(candidates) if candidates else 0.0
-
-            branches[result_key] = {
-                'from_bus_id': index_to_bus_id.get(hv_bus_idx, ''),
-                'to_bus_id': index_to_bus_id.get(lv_bus_idx, ''),
-                'from_current_ka': round(float(current_from), 5) if current_from is not None else None,
-                'to_current_ka': round(float(current_to), 5) if current_to is not None else None,
-                'current_ka': round(float(current_mid), 5) if current_mid is not None else None,
-                'from_ikss_ka': round(float(current_from), 5) if current_from is not None else None,
-                'to_ikss_ka': round(float(current_to), 5) if current_to is not None else None,
-                'ikss_ka': round(float(current_mid), 5) if current_mid is not None else None,
-                'contribution_ka': round(float(contribution_ka), 5)
-            }
+            branches[result_key] = make_branch_result(
+                index_to_bus_id.get(hv_bus_idx, ''),
+                index_to_bus_id.get(lv_bus_idx, ''),
+                current_from,
+                current_to,
+                current_mid
+            )
 
     fault_bus_current = read_float(bus_result, selected_current_cfg['bus_candidates'])
     if fault_bus_current is None:

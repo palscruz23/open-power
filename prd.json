@@ -46,7 +46,7 @@
         "Backend verification passes for at least one representative test network"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "This is the standards-reference short-circuit mode and should expose IEC-specific naming where applicable."
     },
     {
