@@ -10,6 +10,7 @@
 - Transformer protection curves currently choose the protected transformer side by comparing the configured pickup current against the transformer's rated HV/LV currents; keep that heuristic aligned with any future transformer-side settings.
 - Protection coordination charting lives in `frontend/src/components/ControlPanel.jsx` as a native SVG view driven directly by the backend `curves` array; keep loading/error/content state there and avoid adding a second frontend-only curve model.
 - Protection coordination feedback should extend the backend `analysis` block (`warning_count`, `warnings`, `scope_notes`) so warnings and out-of-scope notes stay separate from chart data and device summaries.
+- Advanced-study validation should be duplicated intentionally: `LoadFlowStudyPage.jsx` should preflight disconnected protection assets and unsupported study modes for fast UI feedback, while `backend/main.py` must enforce the same rules with explicit HTTP 400 messages.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -154,4 +155,14 @@
   - Treat `frontend/src/utils/networkPayload.js` as the single source of truth for graph-to-API mapping; `LoadFlowStudyPage.jsx` should choose a study builder, not re-encode buses/loads/transformers inline.
   - Backend study request models can stay explicit without fragmenting the contract by inheriting from one shared network-input base and adding only the study-specific fields per endpoint.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node --input-type=module -e \"import('./src/utils/networkPayload.js')\"` passed as a limited frontend syntax check.
+---
+## 2026-03-10 09:53:15 +10:30 - US-010
+- Hardened advanced-study validation with clearer backend failures for duplicate or impossible network topology, disconnected protection-device assignments, and unsupported protection ground-mode coordination requests.
+- Added frontend preflight validation and API error normalization so short-circuit and protection coordination failures surface as specific result-state messages without leaving stale advanced-study output in place.
+- Files changed: `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_protection.py`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/components/ControlPanel.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Short-circuit and protection validation should reject impossible topology before calling the study engine; `build_network()` is the shared place for reusable network-shape checks like duplicate buses and self-connected lines.
+  - Protection-device preflight in `LoadFlowStudyPage.jsx` should mirror backend rules for disconnected assets and unsupported phase modes so users get immediate guidance, but backend validation in `backend/main.py` still needs to remain authoritative.
+  - Short-circuit result UX now belongs in the same loading/error/content pattern as protection coordination inside `frontend/src/components/ControlPanel.jsx`; avoid dropping advanced-study failures back to the generic raw-error `<pre>` surface.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_protection backend.test_load_flow` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session and the skill itself was not present.
 ---

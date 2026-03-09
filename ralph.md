@@ -6,15 +6,16 @@ You are an autonomous coding agent working on a software project.
 
 1. Read the PRD at `prd.json` (in the same directory as this file)
 2. Read the progress log at `progress.txt` (check Codebase Patterns section first)
-3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-4. Pick the **highest priority** user story where `passes: false`
+3. Check you're on the correct review branch from PRD `branchName`. If not, check it out or create it from main.
+4. Pick the **highest priority** user story where `implemented: false`
 5. Implement that single user story
 6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
 7. Update AGENTS.md files if you discover reusable patterns (see below)
 8. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
-9. Update the PRD to set `passes: true` for the completed story
-10. Append your progress to `progress.txt`
-11. When the run succeeds, the `ralph_once.sh` runner will push the current PRD branch to `origin`
+9. Update the PRD to set `implemented: true` for the completed story
+10. Do not change `accepted`; that field is reserved for human review after the branch is pushed
+11. Append your progress to `progress.txt`
+12. When the run succeeds, the `ralph_once.sh` runner will push the current PRD branch to `origin`
 
 ## Progress Report Format
 
@@ -80,12 +81,12 @@ Only update AGENTS.md if you have **genuinely reusable knowledge** that would he
 
 ## Stop Condition
 
-After completing a user story, check if ALL stories have `passes: true`.
+After completing a user story, check if ALL stories have `implemented: true`.
 
 If ALL tasks are complete and passing, reply with:
 <promise>COMPLETE</promise>
 
-If there are still stories with `passes: false`, end your response normally (another iteration will pick up the next story).
+If there are still stories with `implemented: false`, end your response normally (another iteration will pick up the next story).
 
 ## Important
 

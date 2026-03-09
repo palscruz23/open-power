@@ -32,6 +32,13 @@ import { formatCurrentFromKa } from '../utils/unitFormat';
 const API_BASE = 'http://127.0.0.1:8000';
 const STORAGE_KEY_PREFIX = 'openpower:network:';
 const LOAD_FLOW_NODE_TYPES = new Set(['load', 'resistive_load', 'generator', 'utility']);
+const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
+  'load',
+  'resistive_load',
+  'generator',
+  'utility',
+  'transformer'
+]);
 const TRANSIENT_NODE_DATA_KEYS = new Set([
   'isFaulted',
   'isFaultSelected',
@@ -85,6 +92,31 @@ function sanitizeGraphForPersistence(graph) {
     nodes: Array.isArray(graph?.nodes) ? graph.nodes.map(sanitizeNodeForPersistence) : [],
     edges: Array.isArray(graph?.edges) ? graph.edges.map(sanitizeEdgeForPersistence) : []
   };
+}
+
+function extractStudyErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail.trim();
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const normalizedItems = detail
+      .map((item) => {
+        if (typeof item === 'string' && item.trim()) return item.trim();
+        if (item && typeof item === 'object') {
+          const path = Array.isArray(item.loc) ? item.loc.slice(1).join('.') : '';
+          const message = typeof item.msg === 'string' ? item.msg.trim() : '';
+          if (path && message) return `${path}: ${message}`;
+          if (message) return message;
+        }
+        return null;
+      })
+      .filter(Boolean);
+    if (normalizedItems.length > 0) {
+      return normalizedItems.join('\n');
+    }
+  }
+
+  return error?.message || 'Study failed.';
 }
 
 function loadPersistedGraph(studyType) {
@@ -488,27 +520,69 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     [nodes, edges, resolveConnectedBus]
   );
 
+  const validateShortCircuitRun = useCallback(() => {
+    if (networkModel.buses.length === 0) {
+      return 'Add at least one bus before running short-circuit analysis.';
+    }
+    if (!shortCircuitFaultBusId) {
+      return 'Select a fault bus before running short-circuit analysis.';
+    }
+    if (!networkModel.buses.some((bus) => bus.id === shortCircuitFaultBusId)) {
+      return `Selected fault bus "${shortCircuitFaultBusId}" is no longer available in the current network.`;
+    }
+    return '';
+  }, [networkModel.buses, shortCircuitFaultBusId]);
+
+  const validateProtectionRun = useCallback(() => {
+    const protectedNodes = nodes.filter(
+      (node) => PROTECTION_ELIGIBLE_NODE_TYPES.has(node.type) && Boolean(node.data?.protection?.enabled)
+    );
+
+    if (protectedNodes.length === 0) {
+      return 'Attach at least one protection device before running protection coordination.';
+    }
+
+    const connectedLoadIds = new Set(networkModel.loads.map((load) => load.id));
+    const connectedGeneratorIds = new Set(networkModel.generators.map((generator) => generator.id));
+    const connectedTransformerIds = new Set(networkModel.transformers.map((transformer) => transformer.id));
+
+    for (const node of protectedNodes) {
+      const protection = node.data?.protection || {};
+      const deviceName =
+        typeof protection.name === 'string' && protection.name.trim().length > 0
+          ? protection.name.trim()
+          : `${node.data?.label || node.id} Relay`;
+
+      if (protection.phase_mode === 'ground') {
+        return `Protection device "${deviceName}" uses ground mode, but protection coordination currently supports phase devices only.`;
+      }
+
+      if (node.type === 'transformer' && !connectedTransformerIds.has(node.id)) {
+        return `Protection device "${deviceName}" is attached to transformer "${node.data?.label || node.id}", but that transformer must connect to two buses before running coordination.`;
+      }
+
+      if (
+        (node.type === 'load' || node.type === 'resistive_load') &&
+        !connectedLoadIds.has(node.id)
+      ) {
+        return `Protection device "${deviceName}" is attached to "${node.data?.label || node.id}", but that asset is not connected to a bus.`;
+      }
+
+      if ((node.type === 'generator' || node.type === 'utility') && !connectedGeneratorIds.has(node.id)) {
+        return `Protection device "${deviceName}" is attached to "${node.data?.label || node.id}", but that source is not connected to a bus.`;
+      }
+    }
+
+    return '';
+  }, [networkModel.generators, networkModel.loads, networkModel.transformers, nodes]);
+
   const callStudy = useCallback(
     async (studyType) => {
       try {
         setIsStudyRunning(true);
         setError('');
         setResult(null);
-        const payload =
-          studyType === 'loadflow'
-            ? buildLoadFlowPayload(networkModel)
-            : studyType === 'shortcircuit'
-              ? buildShortCircuitPayload(networkModel, {
-                  faultBusId: shortCircuitFaultBusId,
-                  standard: shortCircuitStandard,
-                  faultType: shortCircuitFaultType,
-                  currentType: shortCircuitCurrentType
-                })
-              : buildProtectionPayload(networkModel);
-        if (studyType === 'protection' && networkModel.protection_devices.length === 0) {
-          setError('Attach at least one protection device before running protection coordination.');
-          return;
-        }
+        let payload = null;
 
         const endpoint =
           studyType === 'loadflow'
@@ -519,11 +593,31 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
         if (studyType === 'shortcircuit') {
           clearShortCircuitAnnotations();
-          if (!shortCircuitFaultBusId) {
-            setError('Select a fault bus before running short-circuit analysis.');
+          const validationError = validateShortCircuitRun();
+          if (validationError) {
+            setError(validationError);
             return;
           }
         }
+        if (studyType === 'protection') {
+          const validationError = validateProtectionRun();
+          if (validationError) {
+            setError(validationError);
+            return;
+          }
+        }
+
+        payload =
+          studyType === 'loadflow'
+            ? buildLoadFlowPayload(networkModel)
+            : studyType === 'shortcircuit'
+              ? buildShortCircuitPayload(networkModel, {
+                  faultBusId: shortCircuitFaultBusId,
+                  standard: shortCircuitStandard,
+                  faultType: shortCircuitFaultType,
+                  currentType: shortCircuitCurrentType
+                })
+              : buildProtectionPayload(networkModel);
 
         const response = await axios.post(`${API_BASE}${endpoint}`, payload);
         if (studyType === 'shortcircuit') {
@@ -971,7 +1065,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         }
         setResult(response.data);
       } catch (err) {
-        setError(err.response?.data?.detail || err.message);
+        setError(extractStudyErrorMessage(err));
       } finally {
         setIsStudyRunning(false);
       }
@@ -984,6 +1078,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       shortCircuitCurrentType,
       clearLoadFlowAnnotations,
       clearShortCircuitAnnotations,
+      validateProtectionRun,
+      validateShortCircuitRun,
       edges,
       nodes
     ]

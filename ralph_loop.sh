@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ONCE_SCRIPT="$ROOT_DIR/ralph_once.sh"
 PRD_FILE="$ROOT_DIR/prd.json"
-MAX_ITERATIONS=3
+MAX_ITERATIONS=10
 
 # Each successful loop iteration runs ralph_once.sh, which commits and pushes
 # the active PRD branch to origin.
@@ -28,7 +28,7 @@ require_cmd() {
 remaining_tasks() {
   (
     cd "$ROOT_DIR"
-    node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('prd.json','utf8'));const n=(d.tasks||[]).filter(t=>t&&t.passes===false).length;console.log(n);"
+    node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('prd.json','utf8'));const isImplemented=t=>Boolean(t&&((typeof t.implemented==='boolean'&&t.implemented)||((typeof t.implemented!=='boolean')&&t.passes===true)));const n=(d.tasks||[]).filter(t=>t&&!isImplemented(t)).length;console.log(n);"
   )
 }
 
@@ -44,9 +44,8 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
     break
   fi
 
-  echo "=== Ralph Loop Iteration $iteration/$MAX_ITERATIONS (remaining tasks: $remaining) ==="
+  echo "[ralph] Iteration $iteration/$MAX_ITERATIONS starting ($remaining task(s) remaining)"
   bash "$ONCE_SCRIPT"
-  echo "=== Iteration $iteration complete and pushed ==="
 
   remaining_after="$(remaining_tasks)"
   if [[ "$remaining_after" -eq 0 ]]; then
@@ -54,9 +53,10 @@ while [[ "$iteration" -le "$MAX_ITERATIONS" ]]; do
     break
   fi
 
+  echo "[ralph] Iteration $iteration finished ($remaining_after task(s) remaining)"
   iteration=$((iteration + 1))
 done
 
 if [[ "$iteration" -gt "$MAX_ITERATIONS" ]]; then
-  echo "Reached max iterations ($MAX_ITERATIONS)."
+  echo "Reached max iterations ($MAX_ITERATIONS)." >&2
 fi
