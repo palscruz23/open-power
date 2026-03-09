@@ -117,7 +117,6 @@ fi
 
 {
   echo "## [$timestamp] - $task_id (runner)"
-  echo "Thread: $thread_url"
   echo "- Runner executed Codex session for $task_id - $task_title"
   echo "- Exit code: $codex_exit"
   echo "- Files changed in working tree after run:"
