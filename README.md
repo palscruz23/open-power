@@ -50,6 +50,23 @@ npm run dev
 
 Open http://127.0.0.1:5173
 
+## Verification
+
+Representative backend study coverage is exercised with the shared sample
+payloads in `backend/test_study_samples.py`.
+
+Windows:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest backend.test_representative_studies
+```
+
+Full backend regression suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_representative_studies
+```
+
 ## Components available in the canvas
 
 - **Bus**
