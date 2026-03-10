@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
+- UI-only study tabs should keep draft inputs and readiness/run state in local React state rather than extending `buildNetworkModel()` or persisting extra study data into the shared graph.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
 - Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
@@ -154,4 +155,13 @@
   - Treat `frontend/src/utils/networkPayload.js` as the single source of truth for graph-to-API mapping; `LoadFlowStudyPage.jsx` should choose a study builder, not re-encode buses/loads/transformers inline.
   - Backend study request models can stay explicit without fragmenting the contract by inheriting from one shared network-input base and adding only the study-specific fields per endpoint.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node --input-type=module -e \"import('./src/utils/networkPayload.js')\"` passed as a limited frontend syntax check.
+---
+## 2026-03-10 10:28:41 +10:30 - US-012
+- Added a dedicated `Arc Flash` study tab and route to the shared study navigation, backed by isolated arc-flash setup state in `LoadFlowStudyPage.jsx` instead of the persisted network payload.
+- Added an arc-flash control panel with draft method/equipment/working-distance inputs, disabled calculation-output fields, prerequisite guidance, and a readiness review state that does not call the backend.
+- Files changed: `frontend/src/App.jsx`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - UI-first study tabs can share the editor shell while keeping unsupported-study inputs local to the page/control panel; do not extend `buildNetworkModel()` or localStorage until backend support exists.
+  - Arc-flash prerequisites are best surfaced in the dedicated result/state card so users see both the missing outputs and the studies that need to be run first.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit` passed; `.venv\\Scripts\\python.exe - <<import app>>` import smoke check passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
 ---

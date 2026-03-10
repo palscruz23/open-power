@@ -171,6 +171,24 @@
       "priority": 11,
       "passes": false,
       "notes": "Coverage can begin with focused integration-style checks before expanding."
+    },
+    {
+      "id": "US-012",
+      "title": "Add a dedicated arc-flash study tab to the shared workflow",
+      "description": "As a power system engineer, I want a separate arc-flash tab in the study workflow so I can configure incident-energy studies without mixing those inputs into load-flow, short-circuit, or protection screens.",
+      "acceptanceCriteria": [
+        "The frontend study navigation includes a dedicated arc-flash tab alongside the existing study tabs",
+        "Arc-flash tab state remains separate from load-flow, short-circuit, and protection controls",
+        "Shared network persistence still excludes transient study results and tab-local run state",
+        "The tab clearly indicates arc-flash prerequisites and unavailable fields before calculation support lands",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 12,
+      "passes": false,
+      "implemented": true,
+      "accepted": false,
+      "notes": "Establish the UX entry point first so later arc-flash work can land without overloading the existing study panels."
     }
   ]
 }
