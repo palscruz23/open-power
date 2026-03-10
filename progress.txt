@@ -2,6 +2,7 @@
 - Keep this section updated with reusable patterns discovered during implementation.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
+- Representative backend study coverage should reuse the shared sample payload builders in `backend/test_study_samples.py` so load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination stay aligned on the same maintained fixtures.
 - Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
@@ -165,4 +166,13 @@
   - Protection-device preflight in `LoadFlowStudyPage.jsx` should mirror backend rules for disconnected assets and unsupported phase modes so users get immediate guidance, but backend validation in `backend/main.py` still needs to remain authoritative.
   - Short-circuit result UX now belongs in the same loading/error/content pattern as protection coordination inside `frontend/src/components/ControlPanel.jsx`; avoid dropping advanced-study failures back to the generic raw-error `<pre>` surface.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_protection backend.test_load_flow` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session and the skill itself was not present.
+---
+## 2026-03-10 10:54:59 +10:30 - US-011
+- Expanded representative backend verification coverage to assert concrete load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination outputs against the shared sample networks.
+- Documented the representative verification command and full backend regression command in `README.md`, and recorded the shared sample-fixture pattern in `AGENTS.md`.
+- Files changed: `backend/test_representative_studies.py`, `README.md`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Keep representative verification focused on stable response-contract fields like branch result keys, study labels, and summary/device metadata instead of asserting transient implementation details.
+  - The shared sample payload builders in `backend/test_study_samples.py` are the right place to evolve representative multi-study fixtures when new study coverage is added.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_representative_studies` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_representative_studies` passed.
 ---

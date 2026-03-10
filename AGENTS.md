@@ -141,6 +141,7 @@ strictly internal.
 Protection coordination notes:
 - The backend derives TCC points from device settings plus calculated load-flow and short-circuit currents; avoid replacing those values with frontend-only demo data.
 - Transformer-attached protection devices currently infer the protected side by comparing the configured pickup current against the transformer's rated HV and LV currents; keep that heuristic in mind if you extend transformer protection inputs.
+- Shared backend sample networks for regression coverage live in `backend/test_study_samples.py`; extend those payload builders first when adding representative study verification so load-flow, short-circuit, and protection suites stay aligned on the same maintained fixtures.
 
 ## 7. Workflow Files
 
