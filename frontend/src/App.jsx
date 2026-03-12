@@ -5,7 +5,8 @@ import LoadFlowStudyPage from './pages/LoadFlowStudyPage';
 const studyTabs = [
   { label: 'Load Flow', to: '/studies/load-flow' },
   { label: 'Short Circuit', to: '/studies/short-circuit' },
-  { label: 'Protection Coordination', to: '/studies/protection-coordination' }
+  { label: 'Protection Coordination', to: '/studies/protection-coordination' },
+  { label: 'Arc Flash', to: '/studies/arc-flash' }
 ];
 
 function TopNavigation() {
@@ -59,6 +60,7 @@ export default function App() {
               path="/studies/protection-coordination"
               element={<LoadFlowStudyPage studyType="protection" />}
             />
+            <Route path="/studies/arc-flash" element={<LoadFlowStudyPage studyType="arcflash" />} />
             <Route path="/contact" element={<ContactUsPage />} />
             <Route path="*" element={<Navigate to="/studies/load-flow" replace />} />
           </Routes>

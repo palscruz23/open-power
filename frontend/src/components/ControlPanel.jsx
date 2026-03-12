@@ -650,10 +650,60 @@ function renderProtectionResults(result, error, isLoading) {
   );
 }
 
+function renderArcFlashResults({ reviewRequested, workingDistanceMm, equipmentClass, method }) {
+  const equipmentLabel =
+    equipmentClass === 'switchgear'
+      ? 'Low-voltage switchgear'
+      : equipmentClass === 'mcc'
+        ? 'Motor control center'
+        : 'Switchboard';
+  const methodLabel = method === 'ieee_1584' ? 'IEEE 1584' : method;
+
+  return (
+    <div className="study-result study-result--arcflash">
+      <h4>Arc-Flash Study Status</h4>
+      <div className="result-state-card">
+        <strong>{reviewRequested ? 'Arc-flash workflow staged' : 'Calculation support pending'}</strong>
+        <span>
+          Incident-energy calculations are not wired yet. Use this tab to review prerequisites and
+          capture draft assumptions without mixing them into other study panels.
+        </span>
+      </div>
+      <div className="result-section">
+        <h5>Prerequisites</h5>
+        <ul className="result-limitations">
+          <li>Build and validate the shared one-line network before starting arc-flash setup.</li>
+          <li>Run short-circuit and protection studies first so fault duty and clearing times are available.</li>
+          <li>Field incident-energy, boundary, and PPE outputs remain unavailable until backend support lands.</li>
+        </ul>
+      </div>
+      <div className="result-summary-grid">
+        <div>
+          <span>Method</span>
+          <strong>{methodLabel}</strong>
+        </div>
+        <div>
+          <span>Equipment Class</span>
+          <strong>{equipmentLabel}</strong>
+        </div>
+        <div>
+          <span>Working Distance</span>
+          <strong>{workingDistanceMm || '-'} mm</strong>
+        </div>
+        <div>
+          <span>Calculation Outputs</span>
+          <strong>Unavailable</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ControlPanel({
   studyType,
   onRunLoadFlow,
   onRunShortCircuit,
+  onRunArcFlash,
   selectedNode,
   onUpdateNode,
   selectedNodesCount,
@@ -670,12 +720,20 @@ export default function ControlPanel({
   onShortCircuitCurrentTypeChange,
   shortCircuitFaultBusId,
   onShortCircuitFaultBusIdChange,
+  arcFlashMethod,
+  onArcFlashMethodChange,
+  arcFlashWorkingDistanceMm,
+  onArcFlashWorkingDistanceMmChange,
+  arcFlashEquipmentClass,
+  onArcFlashEquipmentClassChange,
+  arcFlashReviewRequested,
   onRunProtection,
   protectionDeviceCount,
   isStudyRunning
 }) {
   const isLoadFlow = studyType === 'loadflow';
   const isShortCircuit = studyType === 'shortcircuit';
+  const isArcFlash = studyType === 'arcflash';
   const isProtection = studyType === 'protection';
   const selectedNodeSupportsProtection = selectedNode && PROTECTION_ELIGIBLE_NODE_TYPES.has(selectedNode.type);
   const protection = selectedNodeSupportsProtection ? selectedNode.data.protection || {} : null;
@@ -701,7 +759,9 @@ export default function ControlPanel({
     ? 'Load Flow Settings'
     : isShortCircuit
       ? 'Short Circuit Settings'
-      : 'Protection Coordination Settings';
+      : isArcFlash
+        ? 'Arc Flash Settings'
+        : 'Protection Coordination Settings';
 
   return (
     <section className="controls">
@@ -711,6 +771,7 @@ export default function ControlPanel({
       <div className="buttons">
         {isLoadFlow && <button onClick={onRunLoadFlow}>Run Load Flow</button>}
         {isShortCircuit && <button onClick={onRunShortCircuit}>Run Short Circuit</button>}
+        {isArcFlash && <button onClick={onRunArcFlash}>Review Arc Flash Readiness</button>}
         {isProtection && <button onClick={onRunProtection}>Run Protection Coordination</button>}
       </div>
 
@@ -777,6 +838,56 @@ export default function ControlPanel({
             coordination study to generate time-current curve data from the drawn network.
           </p>
           <p>Configured devices: {protectionDeviceCount}</p>
+        </div>
+      )}
+
+      {isArcFlash && (
+        <div className="editor">
+          <h4>Arc Flash Setup</h4>
+          <p>
+            This tab reserves dedicated arc-flash inputs without mixing them into load-flow,
+            short-circuit, or protection controls.
+          </p>
+          <label>
+            Assessment Method
+            <select value={arcFlashMethod} onChange={(e) => onArcFlashMethodChange(e.target.value)}>
+              <option value="ieee_1584">IEEE 1584</option>
+            </select>
+          </label>
+          <label>
+            Working Distance (mm)
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={arcFlashWorkingDistanceMm}
+              onChange={(e) => onArcFlashWorkingDistanceMmChange(e.target.value)}
+            />
+          </label>
+          <label>
+            Equipment Class
+            <select value={arcFlashEquipmentClass} onChange={(e) => onArcFlashEquipmentClassChange(e.target.value)}>
+              <option value="switchboard">Switchboard</option>
+              <option value="switchgear">Low-voltage switchgear</option>
+              <option value="mcc">Motor control center</option>
+            </select>
+          </label>
+          <label>
+            Arcing Current
+            <input type="text" value="Waiting for calculation support" disabled readOnly />
+          </label>
+          <label>
+            Incident Energy
+            <input type="text" value="Waiting for calculation support" disabled readOnly />
+          </label>
+          <label>
+            Arc Boundary
+            <input type="text" value="Waiting for calculation support" disabled readOnly />
+          </label>
+          <p className="result-note">
+            Prerequisites: define the network, run short-circuit for fault duty, and run protection
+            coordination for clearing-time assumptions before arc-flash calculations are enabled.
+          </p>
         </div>
       )}
 

@@ -178,6 +178,10 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const [shortCircuitFaultType, setShortCircuitFaultType] = useState('three_phase');
   const [shortCircuitCurrentType, setShortCircuitCurrentType] = useState('initial_symmetrical');
   const [shortCircuitFaultBusId, setShortCircuitFaultBusId] = useState('');
+  const [arcFlashMethod, setArcFlashMethod] = useState('ieee_1584');
+  const [arcFlashWorkingDistanceMm, setArcFlashWorkingDistanceMm] = useState('455');
+  const [arcFlashEquipmentClass, setArcFlashEquipmentClass] = useState('switchboard');
+  const [arcFlashReviewRequested, setArcFlashReviewRequested] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const nodeTypes = useMemo(
     () => ({
@@ -578,6 +582,13 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
   const callStudy = useCallback(
     async (studyType) => {
+      if (studyType === 'arcflash') {
+        setError('');
+        setResult(null);
+        setArcFlashReviewRequested(true);
+        return;
+      }
+
       try {
         setIsStudyRunning(true);
         setError('');
@@ -1442,6 +1453,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   useEffect(() => {
     setResult(null);
     setError('');
+    setArcFlashReviewRequested(false);
   }, [studyType]);
 
   useEffect(() => {
@@ -1540,6 +1552,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         onRunLoadFlow={() => callStudy('loadflow')}
         onRunShortCircuit={() => callStudy('shortcircuit')}
         onRunProtection={() => callStudy('protection')}
+        onRunArcFlash={() => callStudy('arcflash')}
         selectedNode={selectedNode}
         onUpdateNode={onUpdateNode}
         selectedNodesCount={selectedNodes.length}
@@ -1556,6 +1569,13 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         onShortCircuitCurrentTypeChange={setShortCircuitCurrentType}
         shortCircuitFaultBusId={shortCircuitFaultBusId}
         onShortCircuitFaultBusIdChange={setShortCircuitFaultBusId}
+        arcFlashMethod={arcFlashMethod}
+        onArcFlashMethodChange={setArcFlashMethod}
+        arcFlashWorkingDistanceMm={arcFlashWorkingDistanceMm}
+        onArcFlashWorkingDistanceMmChange={setArcFlashWorkingDistanceMm}
+        arcFlashEquipmentClass={arcFlashEquipmentClass}
+        onArcFlashEquipmentClassChange={setArcFlashEquipmentClass}
+        arcFlashReviewRequested={arcFlashReviewRequested}
         protectionDeviceCount={protectionDeviceCount}
         isStudyRunning={isStudyRunning}
       />
