@@ -88,6 +88,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - Study tabs that do not have backend calculation support yet should keep draft inputs and readiness state in local React state (`LoadFlowStudyPage.jsx` / `ControlPanel.jsx`) instead of persisting them on nodes, edges, or the shared network payload.
 - Protection coordination responses now return validated device summaries plus a top-level `curves` array; keep future protection analysis and charting work aligned to that response shape instead of inventing a parallel payload.
 - Protection coordination analysis feedback now lives under the shared response `analysis` object (`warning_count`, `warnings`, `scope_notes`); extend that block for future coordination checks instead of adding a second warnings payload in the frontend.
+- Advanced-study validation now assumes short-circuit and protection coordination need an explicitly connected generator or utility source; keep frontend preflight checks in `LoadFlowStudyPage.jsx` aligned with backend source-reachability validation so users get the same actionable message before and after API requests.
 
 When changing backend network models or result payloads, update the frontend
 call sites and renderers in the same task.
@@ -134,6 +135,7 @@ Rules:
   aliases the frontend already renders and add method-aware `result_key` /
   `result_label` metadata or standard-specific fields alongside them rather
   than overloading `ikss_*` names.
+- Advanced studies should not rely on the fallback auto-slack source created for generic load flow; short-circuit and protection coordination now require an explicitly connected generator or utility source and should fail clearly when the study bus is not source-reachable.
 
 Transformer, generator, and short-circuit changes usually require coordinated
 frontend and backend updates. Do not change only one side unless the task is

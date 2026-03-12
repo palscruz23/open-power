@@ -121,9 +121,10 @@
 - Added backend verification for the new analysis payload and a tight-spacing warning scenario.
 - Files changed: `backend/main.py`, `backend/test_protection.py`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
 - **Learnings for future iterations:**
-  - Protection coordination warnings should be derived from the generated `curves` data and returned through `result.analysis`; that keeps review feedback and chart rendering on the same source of truth.
-  - The control-panel protection results surface is the right place to separate warnings from raw curve data; keep analysis feedback there instead of folding it into the chart legend or generic error area.
-  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
+- Protection coordination warnings should be derived from the generated `curves` data and returned through `result.analysis`; that keeps review feedback and chart rendering on the same source of truth.
+- The control-panel protection results surface is the right place to separate warnings from raw curve data; keep analysis feedback there instead of folding it into the chart legend or generic error area.
+- Advanced-study validation should treat source connectivity as part of the study contract: short-circuit and protection coordination should reject source-less or source-disconnected buses in both frontend preflight checks and backend validation instead of relying on the load-flow auto-slack fallback.
+- Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_protection backend.test_short_circuit` passed; `npm.cmd run build` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session.
 ---
 ## [2026-03-09T20:54:03Z] - US-008 (runner)
 - Runner executed Codex session for US-008 - Add protection coordination analysis feedback
@@ -154,9 +155,18 @@
 - Added load-flow regression coverage to confirm the shared model still accepts existing payloads and ignores persisted protection-device metadata when running non-protection studies.
 - Files changed: `frontend/src/utils/networkPayload.js`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `backend/main.py`, `backend/test_load_flow.py`, `AGENTS.md`, `prd.json`, `progress.txt`
 - **Learnings for future iterations:**
-  - Treat `frontend/src/utils/networkPayload.js` as the single source of truth for graph-to-API mapping; `LoadFlowStudyPage.jsx` should choose a study builder, not re-encode buses/loads/transformers inline.
-  - Backend study request models can stay explicit without fragmenting the contract by inheriting from one shared network-input base and adding only the study-specific fields per endpoint.
-  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node --input-type=module -e \"import('./src/utils/networkPayload.js')\"` passed as a limited frontend syntax check.
+- Treat `frontend/src/utils/networkPayload.js` as the single source of truth for graph-to-API mapping; `LoadFlowStudyPage.jsx` should choose a study builder, not re-encode buses/loads/transformers inline.
+- Backend study request models can stay explicit without fragmenting the contract by inheriting from one shared network-input base and adding only the study-specific fields per endpoint.
+- Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node --input-type=module -e \"import('./src/utils/networkPayload.js')\"` passed as a limited frontend syntax check.
+---
+## 2026-03-10 11:04:31 +10:30 - US-010
+- Hardened advanced-study validation so short-circuit and protection coordination now fail early with explicit messages for missing connected sources, source-disconnected study buses, unsupported protection ground mode, and disconnected protection-device asset references.
+- Added frontend preflight checks in `LoadFlowStudyPage.jsx` so short-circuit clears stale annotations before failure and both advanced-study flows show actionable validation errors without leaving prior study output in place.
+- Files changed: `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_protection.py`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Advanced-study validation should happen on both sides of the API boundary: frontend preflight checks keep the UI clean, while backend source-reachability validation preserves the contract for saved diagrams and direct API calls.
+  - The load-flow auto-slack fallback is acceptable for generic network solving but should not be treated as a real source for short-circuit or protection coordination workflows.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---
 ## 2026-03-10 09:53:15 +10:30 - US-010
 - Hardened advanced-study validation with clearer backend failures for duplicate or impossible network topology, disconnected protection-device assignments, and unsupported protection ground-mode coordination requests.

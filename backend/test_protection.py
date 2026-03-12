@@ -126,7 +126,7 @@ class ProtectionCoordinationTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('not connected to a bus', context.exception.detail)
 
-    def test_protection_coordination_rejects_unsupported_ground_mode(self):
+    def test_protection_coordination_rejects_ground_mode_devices(self):
         with self.assertRaises(HTTPException) as context:
             calculate_protection_coordination(
                 self.make_payload(
@@ -152,6 +152,12 @@ class ProtectionCoordinationTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('supports phase devices only', context.exception.detail)
 
+    def test_protection_coordination_requires_connected_source(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_protection_coordination(self.make_payload(generators=[]))
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('requires at least one connected generator or utility source', context.exception.detail)
     def test_protection_coordination_rejects_insufficient_fault_current_range(self):
         with self.assertRaises(HTTPException) as context:
             calculate_protection_coordination(
@@ -177,6 +183,41 @@ class ProtectionCoordinationTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('available three-phase fault current', context.exception.detail)
+
+    def test_protection_coordination_rejects_device_bus_not_connected_to_source(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_protection_coordination(
+                self.make_payload(
+                    buses=[
+                        {'id': 'bus-1', 'name': 'Source', 'vn_kv': 33.0},
+                        {'id': 'bus-2', 'name': 'Main Bus', 'vn_kv': 11.0},
+                        {'id': 'bus-3', 'name': 'Isolated Bus', 'vn_kv': 11.0}
+                    ],
+                    loads=[
+                        {'id': 'load-1', 'bus': 'bus-3', 'p_mw': 1.2, 'q_mvar': 0.3, 'load_type': 'motor'}
+                    ],
+                    transformers=[],
+                    protection_devices=[
+                        {
+                            'asset_id': 'load-1',
+                            'asset_type': 'load',
+                            'device_type': 'oc_relay',
+                            'name': 'Isolated Relay',
+                            'settings': {
+                                'phase_mode': 'phase',
+                                'curve_family': 'iec_standard_inverse',
+                                'pickup_current_a': 180.0,
+                                'time_dial': 0.4,
+                                'instantaneous_pickup_a': 600.0,
+                                'clearing_time_adder_s': 0.05
+                            }
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('not electrically connected to any generator or utility source', context.exception.detail)
 
 
 if __name__ == '__main__':

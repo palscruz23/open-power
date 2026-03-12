@@ -264,6 +264,65 @@ def build_network(payload: SharedNetworkInput, use_motor_elements: bool = False)
     return net, bus_map
 
 
+def build_bus_adjacency(payload: SharedNetworkInput) -> Dict[str, set[str]]:
+    adjacency: Dict[str, set[str]] = {bus.id: set() for bus in payload.buses}
+
+    for line in payload.lines:
+        if line.from_bus in adjacency and line.to_bus in adjacency:
+            adjacency[line.from_bus].add(line.to_bus)
+            adjacency[line.to_bus].add(line.from_bus)
+
+    for transformer in payload.transformers:
+        if transformer.hv_bus in adjacency and transformer.lv_bus in adjacency:
+            adjacency[transformer.hv_bus].add(transformer.lv_bus)
+            adjacency[transformer.lv_bus].add(transformer.hv_bus)
+
+    return adjacency
+
+
+def get_source_reachable_bus_ids(payload: SharedNetworkInput) -> set[str]:
+    source_bus_ids = {generator.bus for generator in payload.generators if generator.bus}
+    if len(source_bus_ids) == 0:
+        return set()
+
+    adjacency = build_bus_adjacency(payload)
+    reachable_bus_ids = {bus_id for bus_id in source_bus_ids if bus_id in adjacency}
+    pending_bus_ids = list(reachable_bus_ids)
+
+    while pending_bus_ids:
+        bus_id = pending_bus_ids.pop()
+        for neighbor_bus_id in adjacency.get(bus_id, set()):
+            if neighbor_bus_id in reachable_bus_ids:
+                continue
+            reachable_bus_ids.add(neighbor_bus_id)
+            pending_bus_ids.append(neighbor_bus_id)
+
+    return reachable_bus_ids
+
+
+def ensure_advanced_study_sources(payload: SharedNetworkInput, study_label: str) -> set[str]:
+    if len(payload.generators) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'{study_label} requires at least one connected generator or utility source in the study network. '
+                'Add a source and connect it to the buses involved in the study before running this analysis.'
+            )
+        )
+
+    reachable_bus_ids = get_source_reachable_bus_ids(payload)
+    if len(reachable_bus_ids) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'{study_label} could not find any buses electrically connected to a generator or utility source. '
+                'Check source bus assignments and network connectivity before running this analysis.'
+            )
+        )
+
+    return reachable_bus_ids
+
+
 @app.get('/health')
 def health() -> Dict[str, str]:
     return {'status': 'ok'}
@@ -440,8 +499,9 @@ def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, o
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f'Protection device "{device.name or device.asset_id}" uses {settings.phase_mode} mode, '
-                    'but protection coordination currently supports phase devices only.'
+                    f'Protection device "{device.name or device.asset_id}" uses "{settings.phase_mode}" mode, '
+                    'but protection coordination currently supports phase devices only. Use phase mode for this '
+                    'release.'
                 )
             )
         missing_fields = []
@@ -1174,11 +1234,21 @@ def calculate_short_circuit(payload: ShortCircuitInput):
     if sc is None:
         raise HTTPException(status_code=503, detail='pandapower short-circuit module unavailable.')
 
+    reachable_bus_ids = ensure_advanced_study_sources(payload, 'Short circuit')
     net, bus_map = build_network(payload, use_motor_elements=True)
     standard_cfg = get_short_circuit_standard_config(payload)
 
     if payload.fault_bus_id not in bus_map:
         raise HTTPException(status_code=400, detail=f'Invalid fault bus reference: {payload.fault_bus_id}')
+    if payload.fault_bus_id not in reachable_bus_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Selected fault bus "{payload.fault_bus_id}" is not electrically connected to any generator or '
+                'utility source in the active study network. Connect the faulted bus to a source before running '
+                'short-circuit analysis.'
+            )
+        )
 
     fault_map = {
         'three_phase': '3ph',
@@ -1350,6 +1420,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
 @app.post('/api/calculate/protection-coordination')
 def calculate_protection_coordination(payload: ProtectionStudyInput):
     validated_devices = validate_protection_study(payload)
+    reachable_bus_ids = ensure_advanced_study_sources(payload, 'Protection coordination')
     load_flow_context = build_protection_load_flow_context(payload)
     fault_current_cache: Dict[str, float] = {}
     devices: List[Dict[str, object]] = []
@@ -1358,6 +1429,15 @@ def calculate_protection_coordination(payload: ProtectionStudyInput):
     for validated_device in validated_devices:
         asset_context = build_protection_asset_context(payload, validated_device, load_flow_context)
         bus_id = str(asset_context['bus_id'])
+        if bus_id not in reachable_bus_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Protection device "{validated_device["name"]}" is assigned to bus "{bus_id}", but that bus '
+                    'is not electrically connected to any generator or utility source in the active study network. '
+                    'Connect the protected asset to an energized bus before running coordination.'
+                )
+            )
         if bus_id not in fault_current_cache:
             fault_current_cache[bus_id] = calculate_bus_fault_current_a(payload, bus_id)
 

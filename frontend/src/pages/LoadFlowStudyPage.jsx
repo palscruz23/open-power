@@ -68,6 +68,65 @@ function getStorageKey(studyType) {
   return `${STORAGE_KEY_PREFIX}${studyType}`;
 }
 
+function buildBusAdjacency(nodes, edges) {
+  const adjacency = new Map(nodes.filter((node) => node.type === 'bus').map((node) => [node.id, new Set()]));
+
+  edges.forEach((edge) => {
+    const sourceNeighbors = adjacency.get(edge.source);
+    const targetNeighbors = adjacency.get(edge.target);
+    if (sourceNeighbors && targetNeighbors) {
+      sourceNeighbors.add(edge.target);
+      targetNeighbors.add(edge.source);
+    }
+  });
+
+  const transformerBusIdsByNode = new Map();
+  nodes
+    .filter((node) => node.type === 'transformer')
+    .forEach((node) => {
+      const connectedBusIds = edges
+        .filter((edge) => edge.source === node.id || edge.target === node.id)
+        .map((edge) => (edge.source === node.id ? edge.target : edge.source))
+        .filter((candidateId) => adjacency.has(candidateId));
+      transformerBusIdsByNode.set(node.id, [...new Set(connectedBusIds)]);
+    });
+
+  transformerBusIdsByNode.forEach((busIds) => {
+    if (busIds.length < 2) return;
+    const [leftBusId, rightBusId] = busIds;
+    adjacency.get(leftBusId)?.add(rightBusId);
+    adjacency.get(rightBusId)?.add(leftBusId);
+  });
+
+  return adjacency;
+}
+
+function getSourceReachableBusIds(nodes, edges) {
+  const adjacency = buildBusAdjacency(nodes, edges);
+  const sourceBusIds = nodes
+    .filter((node) => node.type === 'generator' || node.type === 'utility')
+    .map((node) => {
+      const connectedEdge = edges.find((edge) => edge.source === node.id || edge.target === node.id);
+      if (!connectedEdge) return null;
+      const candidateBusId = connectedEdge.source === node.id ? connectedEdge.target : connectedEdge.source;
+      return adjacency.has(candidateBusId) ? candidateBusId : null;
+    })
+    .filter(Boolean);
+
+  const reachableBusIds = new Set(sourceBusIds);
+  const pendingBusIds = [...reachableBusIds];
+  while (pendingBusIds.length > 0) {
+    const busId = pendingBusIds.pop();
+    adjacency.get(busId)?.forEach((neighborBusId) => {
+      if (reachableBusIds.has(neighborBusId)) return;
+      reachableBusIds.add(neighborBusId);
+      pendingBusIds.push(neighborBusId);
+    });
+  }
+
+  return reachableBusIds;
+}
+
 function sanitizeNodeForPersistence(node) {
   const nextData = { ...(node?.data || {}) };
   TRANSIENT_NODE_DATA_KEYS.forEach((key) => {
@@ -523,6 +582,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     () => buildNetworkModel(nodes, edges, resolveConnectedBus),
     [nodes, edges, resolveConnectedBus]
   );
+  const sourceReachableBusIds = useMemo(() => getSourceReachableBusIds(nodes, edges), [nodes, edges]);
 
   const validateShortCircuitRun = useCallback(() => {
     if (networkModel.buses.length === 0) {
@@ -603,10 +663,61 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               : '/api/calculate/protection-coordination';
 
         if (studyType === 'shortcircuit') {
+          clearLoadFlowAnnotations();
           clearShortCircuitAnnotations();
           const validationError = validateShortCircuitRun();
           if (validationError) {
             setError(validationError);
+            return;
+          }
+          if (networkModel.generators.length === 0) {
+            setError(
+              'Short circuit requires at least one connected generator or utility source in the active study network.'
+            );
+            return;
+          }
+          if (!sourceReachableBusIds.has(shortCircuitFaultBusId)) {
+            setError(
+              `Selected fault bus "${shortCircuitFaultBusId}" is not electrically connected to any generator or utility source.`
+            );
+            return;
+          }
+        }
+
+        if (studyType === 'protection') {
+          if (networkModel.protection_devices.length === 0) {
+            setError('Attach at least one protection device before running protection coordination.');
+            return;
+          }
+          if (networkModel.generators.length === 0) {
+            setError(
+              'Protection coordination requires at least one connected generator or utility source in the active study network.'
+            );
+            return;
+          }
+
+          const invalidProtectionNode = nodes.find((node) => {
+            if (!PROTECTION_ELIGIBLE_NODE_TYPES.has(node.type) || !node.data?.protection?.enabled) {
+              return false;
+            }
+
+            const connectedBusId = resolveConnectedBus(node.id);
+            if (!connectedBusId) {
+              return true;
+            }
+
+            return !sourceReachableBusIds.has(connectedBusId);
+          });
+          if (invalidProtectionNode) {
+            const protectionName =
+              invalidProtectionNode.data?.protection?.name ||
+              `${invalidProtectionNode.data?.label || invalidProtectionNode.id} Relay`;
+            const connectedBusId = resolveConnectedBus(invalidProtectionNode.id);
+            setError(
+              connectedBusId
+                ? `Protection device "${protectionName}" is attached to bus "${connectedBusId}", but that bus is not electrically connected to any generator or utility source.`
+                : `Protection device "${protectionName}" is attached to an asset that is not connected to any bus.`
+            );
             return;
           }
         }
@@ -632,7 +743,6 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
 
         const response = await axios.post(`${API_BASE}${endpoint}`, payload);
         if (studyType === 'shortcircuit') {
-          clearLoadFlowAnnotations();
           const faultBusId = response.data?.fault?.bus_id;
           const currentKa = response.data?.fault_bus?.current_ka;
           const voltageKv = response.data?.fault_bus?.voltage_level_kv;
@@ -1092,7 +1202,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       validateProtectionRun,
       validateShortCircuitRun,
       edges,
-      nodes
+      nodes,
+      resolveConnectedBus,
+      sourceReachableBusIds
     ]
   );
 

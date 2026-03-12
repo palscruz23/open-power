@@ -54,6 +54,42 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('must connect two distinct buses', context.exception.detail)
 
+    def test_short_circuit_requires_connected_source(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_short_circuit(self.make_payload(generators=[]))
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('requires at least one connected generator or utility source', context.exception.detail)
+
+    def test_short_circuit_rejects_fault_bus_not_connected_to_source(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_short_circuit(
+                self.make_payload(
+                    buses=[
+                        {'id': 'bus-1', 'name': 'Source', 'vn_kv': 11.0},
+                        {'id': 'bus-2', 'name': 'Fault Bus', 'vn_kv': 11.0},
+                        {'id': 'bus-3', 'name': 'Dead Bus', 'vn_kv': 11.0}
+                    ],
+                    lines=[
+                        {
+                            'id': 'line-1',
+                            'from_bus': 'bus-1',
+                            'to_bus': 'bus-2',
+                            'length_km': 1.0,
+                            'r_ohm_per_km': 0.08,
+                            'x_ohm_per_km': 0.12,
+                            'c_nf_per_km': 10.0,
+                            'max_i_ka': 1.0
+                        }
+                    ],
+                    loads=[],
+                    fault_bus_id='bus-3'
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('not electrically connected to any generator or utility source', context.exception.detail)
+
     def test_iec_60909_thermal_results_use_iec_specific_labels_and_branch_keys(self):
         result = calculate_short_circuit(
             self.make_payload(standard='iec_60909', current_type='thermal_equivalent')
