@@ -279,6 +279,70 @@
       "implemented": false,
       "accepted": false,
       "notes": "Extend the existing representative-study verification strategy rather than inventing a separate testing approach for arc-flash."
+    },
+    {
+      "id": "US-018",
+      "title": "Differentiate ANSI and IEC short-circuit results",
+      "description": "As a power system engineer, I want ANSI and IEC short-circuit studies to produce method-appropriate results so the selected calculation standard changes the reported fault duties when the underlying assumptions differ.",
+      "acceptanceCriteria": [
+        "Verification demonstrates that ANSI and IEC runs do not silently return the same result set for a representative network unless the match is explicitly justified by the model inputs",
+        "Backend checks and calculation paths are reviewed and adjusted where necessary so standard-specific factors, quantities, or engine settings are applied correctly",
+        "If a case cannot be differentiated because of an engine limitation, the response clearly states that limitation instead of implying two distinct methods were applied",
+        "Frontend continues to label the selected short-circuit standard correctly after the backend change",
+        "Backend verification passes for at least one network comparing ANSI and IEC outputs"
+      ],
+      "priority": 18,
+      "implemented": false,
+      "accepted": false,
+      "notes": "This task addresses the regression where ANSI and IEC currently provide the same answer."
+    },
+    {
+      "id": "US-019",
+      "title": "Add protection devices to the component palette and editors",
+      "description": "As a protection engineer, I want protection devices to exist as selectable components in the app so I can place, configure, and study them directly from the diagram workflow.",
+      "acceptanceCriteria": [
+        "Frontend component palette includes supported protection-device entries that fit the existing node taxonomy and editor workflow",
+        "Protection-device nodes or attachments expose the required editable settings in the control panel",
+        "Shared payload construction includes the new protection-device component data without breaking existing studies",
+        "Persistence sanitization and study reset paths keep transient study results out of saved diagrams",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 19,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Keep the protection model aligned across component defaults, editors, payload mapping, and backend validation."
+    },
+    {
+      "id": "US-020",
+      "title": "Prevent overlapping short-circuit contribution annotations",
+      "description": "As a user, I want fault contribution displays to remain visually distinct from other fault-current annotations so I can read short-circuit results on the canvas without ambiguity.",
+      "acceptanceCriteria": [
+        "Short-circuit contribution labels do not overlap other fault-current labels in common study views",
+        "When multiple result annotations are present near the same asset, the UI applies a deterministic layout or offset strategy to keep them readable",
+        "Running repeated short-circuit studies still clears and redraws annotations cleanly",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 20,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Focus on canvas readability for branch contribution and fault-current overlays."
+    },
+    {
+      "id": "US-021",
+      "title": "Correct transformer primary and secondary short-circuit currents",
+      "description": "As a power system engineer, I want transformer short-circuit results to report distinct primary-side and secondary-side currents when appropriate so transformer fault duties reflect the actual winding ratio and study side.",
+      "acceptanceCriteria": [
+        "Short-circuit results no longer report identical transformer primary and secondary currents by default when the transformer ratio and study conditions imply different values",
+        "Backend transformer current calculations or result mapping correctly account for winding side, turns ratio, and base conversion",
+        "Frontend labels transformer-side current results clearly so primary and secondary values are not conflated",
+        "Backend verification covers at least one transformer fault case with different expected primary and secondary currents"
+      ],
+      "priority": 21,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Review both calculation and result-mapping paths so transformer-side currents are not duplicated incorrectly."
     }
   ]
 }

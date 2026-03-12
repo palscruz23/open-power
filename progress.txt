@@ -185,3 +185,10 @@
   - Load-flow line results expose directional currents as `i_from_ka` / `i_to_ka` plus `loading_percent`; do not assume a generic line `current_ka` field when adding verification.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -c "import backend.main; print('backend import ok')"` passed.
 ---
+## [2026-03-10T00:38:32Z] - US-011 (runner)
+- Runner executed Codex session for US-011 - Add representative study verification coverage
+- Exit code: 0
+- Files changed in working tree after run:
+  - none
+- Latest commit: 18ffd43 feat: [US-011] - [Add representative study verification coverage]
+---
