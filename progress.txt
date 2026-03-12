@@ -202,3 +202,10 @@
   - Arc-flash draft inputs (`arcFlashMethod`, `arcFlashWorkingDistanceMm`, `arcFlashEquipmentClass`, `arcFlashReviewRequested`) are local React state in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep future unfinished-study fields there instead of extending persisted graph data or `frontend/src/utils/networkPayload.js`.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---
+## 2026-03-12 23:31:12 +10:30 - US-012
+- Routed the arc-flash tab to its dedicated status renderer so readiness reviews stay in the arc-flash panel instead of falling back to the generic result output path.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `progress.txt`
+- **Learnings for future iterations:**
+  - Placeholder study tabs still need an explicit result renderer branch in `frontend/src/components/ControlPanel.jsx`; otherwise local review state can silently fall through to the generic `result`/`error` output used by load flow.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
