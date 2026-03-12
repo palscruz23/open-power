@@ -212,7 +212,7 @@
         "Typecheck/build passes"
       ],
       "priority": 13,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Keep the arc-flash input model minimal but explicit so standards-specific calculation logic can evolve without rewriting the UI contract."
     },

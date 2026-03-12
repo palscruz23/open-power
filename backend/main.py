@@ -100,6 +100,22 @@ class ProtectionStudyInput(SharedNetworkInput):
     coordination_margin_s: float = Field(default=0.3, ge=0)
 
 
+class ArcFlashFaultClearingInput(BaseModel):
+    mode: Literal['fixed_time', 'protective_device'] = 'fixed_time'
+    duration_s: float | None = Field(default=None, gt=0)
+    device_id: str | None = None
+
+
+class ArcFlashInput(SharedNetworkInput):
+    method: Literal['ieee_1584'] = 'ieee_1584'
+    study_bus_id: str
+    equipment_label: str = Field(min_length=1)
+    equipment_class: Literal['switchboard', 'switchgear', 'mcc']
+    enclosure_type: Literal['enclosed', 'open_air'] = 'enclosed'
+    working_distance_mm: float = Field(gt=0)
+    fault_clearing: ArcFlashFaultClearingInput = Field(default_factory=ArcFlashFaultClearingInput)
+
+
 app = FastAPI(title='OpenPower Studio API', version='0.1.0')
 
 app.add_middleware(
@@ -567,6 +583,67 @@ def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, o
         )
 
     return validated_devices
+
+
+def validate_arc_flash_study(payload: ArcFlashInput) -> Dict[str, object]:
+    reachable_bus_ids = ensure_advanced_study_sources(payload, 'Arc flash')
+
+    if payload.study_bus_id not in {bus.id for bus in payload.buses}:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Arc-flash study bus "{payload.study_bus_id}" does not exist in the active network.'
+        )
+
+    if payload.study_bus_id not in reachable_bus_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Arc-flash study bus "{payload.study_bus_id}" is not electrically connected to any generator or '
+                'utility source in the active study network.'
+            )
+        )
+
+    equipment_label = payload.equipment_label.strip()
+    if len(equipment_label) == 0:
+        raise HTTPException(status_code=400, detail='Arc-flash equipment label is required.')
+
+    clearing = payload.fault_clearing
+    if clearing.mode == 'fixed_time':
+        if clearing.duration_s is None:
+            raise HTTPException(
+                status_code=400,
+                detail='Arc-flash fixed clearing time is required when the fixed-time assumption is selected.'
+            )
+        if clearing.device_id:
+            raise HTTPException(
+                status_code=400,
+                detail='Arc-flash fixed clearing time mode cannot also reference a protection device.'
+            )
+    else:
+        if not clearing.device_id or len(clearing.device_id.strip()) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail='Select a protection device when arc-flash clearing time is based on device assumptions.'
+            )
+
+        known_device = next(
+            (device for device in payload.protection_devices if device.asset_id == clearing.device_id),
+            None
+        )
+        if known_device is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f'Arc-flash clearing device "{clearing.device_id}" is not available in the active network. '
+                    'Configure protection on the referenced asset before using device-based clearing assumptions.'
+                )
+            )
+
+    study_bus = next(bus for bus in payload.buses if bus.id == payload.study_bus_id)
+    return {
+        'study_bus': study_bus,
+        'equipment_label': equipment_label,
+    }
 
 
 PROTECTION_CURVE_LIBRARY = {
@@ -1503,4 +1580,43 @@ def calculate_protection_coordination(payload: ProtectionStudyInput):
         'devices': devices,
         'curves': curves,
         'analysis': analysis
+    }
+
+
+@app.post('/api/calculate/arc-flash')
+def calculate_arc_flash(payload: ArcFlashInput):
+    context = validate_arc_flash_study(payload)
+    study_bus = context['study_bus']
+    equipment_label = context['equipment_label']
+    clearing = payload.fault_clearing
+
+    clearing_summary = {
+        'mode': clearing.mode,
+        'duration_s': round(float(clearing.duration_s), 5) if clearing.duration_s is not None else None,
+        'device_id': clearing.device_id,
+        'assumption_label': (
+            f'Fixed clearing time of {round(float(clearing.duration_s), 5)} s'
+            if clearing.mode == 'fixed_time'
+            else f'Protection device assumption from {clearing.device_id}'
+        )
+    }
+
+    return {
+        'status': 'ready',
+        'message': 'Arc-flash study inputs validated. Calculation outputs remain unavailable in this release.',
+        'assumptions': {
+            'method': payload.method,
+            'study_bus_id': payload.study_bus_id,
+            'study_bus_name': study_bus.name,
+            'study_bus_voltage_kv': round(float(study_bus.vn_kv), 5),
+            'equipment_label': equipment_label,
+            'equipment_class': payload.equipment_class,
+            'enclosure_type': payload.enclosure_type,
+            'working_distance_mm': round(float(payload.working_distance_mm), 5),
+            'fault_clearing': clearing_summary
+        },
+        'limitations': [
+            'Incident energy and arc-flash boundary calculations are not implemented yet.',
+            'The current arc-flash workflow validates study inputs and working assumptions only.'
+        ]
     }

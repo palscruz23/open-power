@@ -650,50 +650,114 @@ function renderProtectionResults(result, error, isLoading) {
   );
 }
 
-function renderArcFlashResults({ reviewRequested, workingDistanceMm, equipmentClass, method }) {
-  const equipmentLabel =
-    equipmentClass === 'switchgear'
-      ? 'Low-voltage switchgear'
-      : equipmentClass === 'mcc'
-        ? 'Motor control center'
-        : 'Switchboard';
-  const methodLabel = method === 'ieee_1584' ? 'IEEE 1584' : method;
+function renderArcFlashResults(result, error, isLoading, reviewRequested) {
+  if (isLoading) {
+    return (
+      <div className="study-result study-result--arcflash">
+        <h4>Arc-Flash Study Status</h4>
+        <div className="result-state-card result-state-card--loading">
+          <strong>Validating arc-flash inputs</strong>
+          <span>Checking the selected equipment, working distance, and clearing assumptions.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="study-result study-result--arcflash">
+        <h4>Arc-Flash Study Status</h4>
+        <div className="result-state-card result-state-card--error">
+          <strong>Arc-flash setup failed</strong>
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="study-result study-result--arcflash">
+        <h4>Arc-Flash Study Status</h4>
+        <div className="result-state-card">
+          <strong>{reviewRequested ? 'Arc-flash inputs updated' : 'No arc-flash review yet'}</strong>
+          <span>Run the arc-flash review to validate study inputs and working assumptions.</span>
+        </div>
+      </div>
+    );
+  }
+
+  const assumptions = result?.assumptions || {};
+  const clearing = assumptions?.fault_clearing || {};
+  const limitations = Array.isArray(result?.limitations) ? result.limitations : [];
 
   return (
     <div className="study-result study-result--arcflash">
       <h4>Arc-Flash Study Status</h4>
-      <div className="result-state-card">
-        <strong>{reviewRequested ? 'Arc-flash workflow staged' : 'Calculation support pending'}</strong>
-        <span>
-          Incident-energy calculations are not wired yet. Use this tab to review prerequisites and
-          capture draft assumptions without mixing them into other study panels.
-        </span>
-      </div>
-      <div className="result-section">
-        <h5>Prerequisites</h5>
-        <ul className="result-limitations">
-          <li>Build and validate the shared one-line network before starting arc-flash setup.</li>
-          <li>Run short-circuit and protection studies first so fault duty and clearing times are available.</li>
-          <li>Field incident-energy, boundary, and PPE outputs remain unavailable until backend support lands.</li>
-        </ul>
-      </div>
+      <p className="result-note">{result?.message || 'Arc-flash inputs validated.'}</p>
       <div className="result-summary-grid">
         <div>
-          <span>Method</span>
-          <strong>{methodLabel}</strong>
+          <span>Status</span>
+          <strong>{result?.status || 'Unknown'}</strong>
         </div>
         <div>
-          <span>Equipment Class</span>
-          <strong>{equipmentLabel}</strong>
+          <span>Method</span>
+          <strong>{assumptions?.method === 'ieee_1584' ? 'IEEE 1584' : assumptions?.method || '-'}</strong>
+        </div>
+        <div>
+          <span>Study Bus</span>
+          <strong>{assumptions?.study_bus_name || assumptions?.study_bus_id || '-'}</strong>
+        </div>
+        <div>
+          <span>Equipment</span>
+          <strong>{assumptions?.equipment_label || '-'}</strong>
         </div>
         <div>
           <span>Working Distance</span>
-          <strong>{workingDistanceMm || '-'} mm</strong>
+          <strong>{assumptions?.working_distance_mm ?? '-'} mm</strong>
         </div>
         <div>
-          <span>Calculation Outputs</span>
-          <strong>Unavailable</strong>
+          <span>Clearing Assumption</span>
+          <strong>{clearing?.assumption_label || '-'}</strong>
         </div>
+      </div>
+      <div className="result-section">
+        <h5>Working Assumptions</h5>
+        <div className="result-list">
+          <div className="result-list-row">
+            <div>
+              <strong>Equipment Class</strong>
+              <span>Equipment class used for the study request.</span>
+            </div>
+            <div>{assumptions?.equipment_class || '-'}</div>
+          </div>
+          <div className="result-list-row">
+            <div>
+              <strong>Enclosure Type</strong>
+              <span>Enclosed or open-air working assumption.</span>
+            </div>
+            <div>{assumptions?.enclosure_type || '-'}</div>
+          </div>
+          <div className="result-list-row">
+            <div>
+              <strong>Bus Voltage</strong>
+              <span>Nominal voltage at the selected study bus.</span>
+            </div>
+            <div>{assumptions?.study_bus_voltage_kv ?? '-'} kV</div>
+          </div>
+        </div>
+      </div>
+      <div className="result-section">
+        <h5>Limitations</h5>
+        {limitations.length > 0 ? (
+          <ul className="result-limitations">
+            {limitations.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="result-empty">No additional arc-flash limitations were reported.</p>
+        )}
       </div>
     </div>
   );
@@ -722,10 +786,23 @@ export default function ControlPanel({
   onShortCircuitFaultBusIdChange,
   arcFlashMethod,
   onArcFlashMethodChange,
+  arcFlashStudyBusId,
+  onArcFlashStudyBusIdChange,
+  arcFlashEquipmentLabel,
+  onArcFlashEquipmentLabelChange,
   arcFlashWorkingDistanceMm,
   onArcFlashWorkingDistanceMmChange,
   arcFlashEquipmentClass,
   onArcFlashEquipmentClassChange,
+  arcFlashEnclosureType,
+  onArcFlashEnclosureTypeChange,
+  arcFlashClearingMode,
+  onArcFlashClearingModeChange,
+  arcFlashClearingTimeS,
+  onArcFlashClearingTimeSChange,
+  arcFlashClearingDeviceId,
+  onArcFlashClearingDeviceIdChange,
+  arcFlashDeviceOptions,
   arcFlashReviewRequested,
   onRunProtection,
   protectionDeviceCount,
@@ -845,14 +922,37 @@ export default function ControlPanel({
         <div className="editor">
           <h4>Arc Flash Setup</h4>
           <p>
-            This tab reserves dedicated arc-flash inputs without mixing them into load-flow,
-            short-circuit, or protection controls.
+            Capture the minimum study assumptions here without persisting arc-flash results into
+            the shared one-line diagram.
           </p>
           <label>
             Assessment Method
             <select value={arcFlashMethod} onChange={(e) => onArcFlashMethodChange(e.target.value)}>
               <option value="ieee_1584">IEEE 1584</option>
             </select>
+          </label>
+          <label>
+            Study Bus
+            <select
+              value={arcFlashStudyBusId}
+              onChange={(e) => onArcFlashStudyBusIdChange(e.target.value)}
+              disabled={busNodes.length === 0}
+            >
+              <option value="">{busNodes.length === 0 ? 'No buses available' : 'Select a bus'}</option>
+              {busNodes.map((busNode) => (
+                <option key={busNode.id} value={busNode.id}>
+                  {busNode.data.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Equipment Label
+            <input
+              value={arcFlashEquipmentLabel}
+              onChange={(e) => onArcFlashEquipmentLabelChange(e.target.value)}
+              placeholder="Main switchboard section A"
+            />
           </label>
           <label>
             Working Distance (mm)
@@ -873,20 +973,51 @@ export default function ControlPanel({
             </select>
           </label>
           <label>
-            Arcing Current
-            <input type="text" value="Waiting for calculation support" disabled readOnly />
+            Enclosure Type
+            <select value={arcFlashEnclosureType} onChange={(e) => onArcFlashEnclosureTypeChange(e.target.value)}>
+              <option value="enclosed">Enclosed</option>
+              <option value="open_air">Open Air</option>
+            </select>
           </label>
           <label>
-            Incident Energy
-            <input type="text" value="Waiting for calculation support" disabled readOnly />
+            Fault Clearing Basis
+            <select value={arcFlashClearingMode} onChange={(e) => onArcFlashClearingModeChange(e.target.value)}>
+              <option value="fixed_time">Fixed clearing time</option>
+              <option value="protective_device">Protection device assumption</option>
+            </select>
           </label>
-          <label>
-            Arc Boundary
-            <input type="text" value="Waiting for calculation support" disabled readOnly />
-          </label>
+          {arcFlashClearingMode === 'fixed_time' ? (
+            <label>
+              Fixed Clearing Time (s)
+              <input
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={arcFlashClearingTimeS}
+                onChange={(e) => onArcFlashClearingTimeSChange(e.target.value)}
+              />
+            </label>
+          ) : (
+            <label>
+              Protection Device
+              <select
+                value={arcFlashClearingDeviceId}
+                onChange={(e) => onArcFlashClearingDeviceIdChange(e.target.value)}
+              >
+                <option value="">
+                  {arcFlashDeviceOptions.length === 0 ? 'No eligible protection devices' : 'Select a device'}
+                </option>
+                {arcFlashDeviceOptions.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <p className="result-note">
-            Prerequisites: define the network, run short-circuit for fault duty, and run protection
-            coordination for clearing-time assumptions before arc-flash calculations are enabled.
+            Run this review to validate the minimum arc-flash request model before incident-energy
+            calculations land.
           </p>
         </div>
       )}
@@ -1230,6 +1361,8 @@ export default function ControlPanel({
         renderProtectionResults(result, error, isStudyRunning)
       ) : isShortCircuit ? (
         renderShortCircuitResults(result, error, isStudyRunning)
+      ) : isArcFlash ? (
+        renderArcFlashResults(result, error, isStudyRunning, arcFlashReviewRequested)
       ) : result ? (
         <pre className="result">{JSON.stringify(result, null, 2)}</pre>
       ) : error ? (

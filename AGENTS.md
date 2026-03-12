@@ -86,6 +86,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - Advanced-study validation should fail early in both layers: keep `LoadFlowStudyPage.jsx` preflight checks aligned with backend protection/short-circuit validation for disconnected assets, unsupported protection modes, and other study-blocking topology issues so the canvas clears stale results before the request and the backend still enforces the same rule set.
 - Shared frontend study payload construction now lives in `frontend/src/utils/networkPayload.js`; extend `buildNetworkModel()` for base graph fields and the per-study builders there instead of adding another inline serializer in `LoadFlowStudyPage.jsx`.
 - Study tabs that do not have backend calculation support yet should keep draft inputs and readiness state in local React state (`LoadFlowStudyPage.jsx` / `ControlPanel.jsx`) instead of persisting them on nodes, edges, or the shared network payload.
+- Arc-flash study inputs should stay in local React state and flow through `buildArcFlashPayload()` plus the backend `ArcFlashInput` model; do not persist arc-flash assumptions on nodes, edges, or the shared network graph.
 - Protection coordination responses now return validated device summaries plus a top-level `curves` array; keep future protection analysis and charting work aligned to that response shape instead of inventing a parallel payload.
 - Protection coordination analysis feedback now lives under the shared response `analysis` object (`warning_count`, `warnings`, `scope_notes`); extend that block for future coordination checks instead of adding a second warnings payload in the frontend.
 - Advanced-study validation now assumes short-circuit and protection coordination need an explicitly connected generator or utility source; keep frontend preflight checks in `LoadFlowStudyPage.jsx` aligned with backend source-reachability validation so users get the same actionable message before and after API requests.
@@ -145,6 +146,7 @@ Protection coordination notes:
 - The backend derives TCC points from device settings plus calculated load-flow and short-circuit currents; avoid replacing those values with frontend-only demo data.
 - Transformer-attached protection devices currently infer the protected side by comparing the configured pickup current against the transformer's rated HV and LV currents; keep that heuristic in mind if you extend transformer protection inputs.
 - Shared backend sample networks for regression coverage live in `backend/test_study_samples.py`; extend those payload builders first when adding representative study verification so load-flow, short-circuit, and protection suites stay aligned on the same maintained fixtures.
+- Device-based arc-flash clearing assumptions should reference the shared `protection_devices` asset ids from the network payload rather than introducing a second protection-device registry for arc-flash studies.
 
 ## 7. Workflow Files
 

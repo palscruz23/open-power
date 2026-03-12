@@ -6,6 +6,7 @@
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
 - Representative backend study coverage should reuse the shared sample payload builders in `backend/test_study_samples.py` so load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination stay aligned on the same maintained fixtures.
 - Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
+- Arc-flash study assumptions should stay ephemeral in `LoadFlowStudyPage.jsx` / `ControlPanel.jsx`, then serialize through `buildArcFlashPayload()` into the backend `ArcFlashInput` model instead of being persisted on the shared graph.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
 - Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
@@ -191,4 +192,13 @@
 - Files changed in working tree after run:
   - none
 - Latest commit: 18ffd43 feat: [US-011] - [Add representative study verification coverage]
+---
+## 2026-03-12 23:25:01 +10:30 - US-013
+- Added explicit arc-flash study inputs for bus selection, equipment label, enclosure/equipment class, working distance, and clearing assumptions, then wired the arc-flash tab to a dedicated backend validation endpoint instead of a frontend-only placeholder.
+- Added shared arc-flash payload/model coverage so the backend receives the base network once plus explicit arc-flash fields, while saved diagrams remain unchanged because the new study inputs stay in local React state.
+- Files changed: `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/utils/networkPayload.js`, `backend/main.py`, `backend/test_study_samples.py`, `backend/test_arc_flash.py`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Arc-flash request shaping should reuse `buildLoadFlowPayload()` and append only the study-specific fields through `buildArcFlashPayload()` so future arc-flash work stays aligned with the shared network model.
+  - Device-based arc-flash clearing assumptions should reference `protection_devices` asset ids from the shared network payload; the frontend should filter those choices to connected, source-reachable protection assets before the request.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; fallback JSX parse check passed for the edited frontend files.
 ---
