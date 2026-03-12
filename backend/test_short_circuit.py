@@ -3,41 +3,12 @@ import unittest
 from fastapi import HTTPException
 
 from backend.main import ShortCircuitInput, calculate_short_circuit
+from backend.test_study_samples import make_short_circuit_payload
 
 
 class ShortCircuitTests(unittest.TestCase):
     def make_payload(self, **overrides):
-        payload = {
-            'standard': 'ansi',
-            'fault_bus_id': 'bus-2',
-            'fault_type': 'three_phase',
-            'current_type': 'initial_symmetrical',
-            'buses': [
-                {'id': 'bus-1', 'name': 'Source', 'vn_kv': 11.0},
-                {'id': 'bus-2', 'name': 'Load Bus', 'vn_kv': 11.0}
-            ],
-            'lines': [
-                {
-                    'id': 'line-1',
-                    'from_bus': 'bus-1',
-                    'to_bus': 'bus-2',
-                    'length_km': 1.0,
-                    'r_ohm_per_km': 0.08,
-                    'x_ohm_per_km': 0.12,
-                    'c_nf_per_km': 10.0,
-                    'max_i_ka': 1.0
-                }
-            ],
-            'loads': [
-                {'id': 'load-1', 'bus': 'bus-2', 'p_mw': 1.0, 'q_mvar': 0.2, 'load_type': 'static'}
-            ],
-            'generators': [
-                {'id': 'source-1', 'bus': 'bus-1', 'p_mw': 0.0, 'vm_pu': 1.0}
-            ],
-            'transformers': []
-        }
-        payload.update(overrides)
-        return ShortCircuitInput(**payload)
+        return ShortCircuitInput(**make_short_circuit_payload(**overrides).model_dump())
 
     def test_ansi_short_circuit_returns_standard_aware_fault_and_branch_results(self):
         result = calculate_short_circuit(self.make_payload())
@@ -60,6 +31,28 @@ class ShortCircuitTests(unittest.TestCase):
 
         self.assertEqual(context.exception.status_code, 400)
         self.assertIn('only three-phase faults', context.exception.detail)
+
+    def test_short_circuit_rejects_impossible_self_connected_line(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_short_circuit(
+                self.make_payload(
+                    lines=[
+                        {
+                            'id': 'line-1',
+                            'from_bus': 'bus-2',
+                            'to_bus': 'bus-2',
+                            'length_km': 1.0,
+                            'r_ohm_per_km': 0.08,
+                            'x_ohm_per_km': 0.12,
+                            'c_nf_per_km': 10.0,
+                            'max_i_ka': 1.0
+                        }
+                    ]
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn('must connect two distinct buses', context.exception.detail)
 
     def test_iec_60909_thermal_results_use_iec_specific_labels_and_branch_keys(self):
         result = calculate_short_circuit(

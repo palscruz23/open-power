@@ -1,37 +1,12 @@
 import unittest
 
 from backend.main import LoadFlowInput, calculate_load_flow
+from backend.test_study_samples import make_load_flow_payload
 
 
 class LoadFlowTests(unittest.TestCase):
     def make_payload(self, **overrides):
-        payload = {
-            'buses': [
-                {'id': 'bus-1', 'name': 'Source', 'vn_kv': 11.0},
-                {'id': 'bus-2', 'name': 'Load Bus', 'vn_kv': 11.0}
-            ],
-            'lines': [
-                {
-                    'id': 'line-1',
-                    'from_bus': 'bus-1',
-                    'to_bus': 'bus-2',
-                    'length_km': 1.0,
-                    'r_ohm_per_km': 0.08,
-                    'x_ohm_per_km': 0.12,
-                    'c_nf_per_km': 10.0,
-                    'max_i_ka': 1.0
-                }
-            ],
-            'loads': [
-                {'id': 'load-1', 'bus': 'bus-2', 'p_mw': 1.0, 'q_mvar': 0.2, 'load_type': 'static'}
-            ],
-            'generators': [
-                {'id': 'source-1', 'bus': 'bus-1', 'p_mw': 0.0, 'vm_pu': 1.0}
-            ],
-            'transformers': []
-        }
-        payload.update(overrides)
-        return LoadFlowInput(**payload)
+        return LoadFlowInput(**make_load_flow_payload(**overrides).model_dump())
 
     def test_load_flow_keeps_existing_payload_shape_compatible(self):
         result = calculate_load_flow(self.make_payload())

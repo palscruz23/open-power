@@ -1,7 +1,7 @@
 {
   "project": "OpenPower Studio",
-  "branchName": "main",
-  "description": "OpenPower Studio roadmap focused on standards-based short-circuit analysis and full protection coordination, while preserving the existing local single-line editor and study workflow.",
+  "branchPrefix": "review",
+  "description": "OpenPower Studio roadmap focused on standards-based short-circuit analysis, protection coordination, and arc-flash calculations, while preserving the existing local single-line editor and expanding the shared study workflow with dedicated analysis tabs.",
   "tasks": [
     {
       "id": "US-001",
@@ -16,7 +16,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 1,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "This task establishes the common product and API entry point used by both short-circuit standards."
     },
     {
@@ -31,7 +32,8 @@
         "Backend verification passes for at least one representative test network"
       ],
       "priority": 2,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "Use standards-oriented behavior and make any pandapower or engine limitations explicit rather than hiding them."
     },
     {
@@ -46,7 +48,8 @@
         "Backend verification passes for at least one representative test network"
       ],
       "priority": 3,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "This is the standards-reference short-circuit mode and should expose IEC-specific naming where applicable."
     },
     {
@@ -62,7 +65,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "Keep the shared graph workflow intact and avoid persisting transient result annotations."
     },
     {
@@ -78,7 +82,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "Define a minimal but extensible device/settings model suitable for TCC generation."
     },
     {
@@ -93,7 +98,8 @@
         "Backend verification passes for at least one representative coordination scenario"
       ],
       "priority": 6,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "This task focuses on producing valid curve data, not only placeholder UI."
     },
     {
@@ -109,7 +115,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 7,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "The chart should support practical engineering review, not just a static screenshot."
     },
     {
@@ -125,7 +132,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "Start with high-signal warnings; full automatic coordination grading can evolve later."
     },
     {
@@ -139,7 +147,8 @@
         "Typecheck/build passes and backend verification passes"
       ],
       "priority": 9,
-      "passes": true,
+      "implemented": true,
+      "accepted": true,
       "notes": "This task keeps the roadmap maintainable as more studies are added."
     },
     {
@@ -154,7 +163,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 10,
-      "passes": false,
+      "implemented": true,
+      "accepted": false,
       "notes": "Keep engineering limitations explicit and user-facing."
     },
     {
@@ -169,7 +179,8 @@
         "Documented quality checks pass"
       ],
       "priority": 11,
-      "passes": false,
+      "implemented": true,
+      "accepted": false,
       "notes": "Coverage can begin with focused integration-style checks before expanding."
     },
     {
@@ -185,10 +196,89 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 12,
-      "passes": false,
-      "implemented": true,
+      "implemented": false,
       "accepted": false,
       "notes": "Establish the UX entry point first so later arc-flash work can land without overloading the existing study panels."
+    },
+    {
+      "id": "US-013",
+      "title": "Capture arc-flash study inputs and working assumptions",
+      "description": "As a protection engineer, I want to enter arc-flash calculation inputs and assumptions so the backend receives the equipment, clearing-time, and working-distance data needed for a study.",
+      "acceptanceCriteria": [
+        "Arc-flash inputs capture the minimum required study fields such as bus/equipment selection, working distance, enclosure or equipment class, and fault clearing assumptions",
+        "Frontend payload mapping sends arc-flash inputs through a dedicated request model without duplicating the base network graph payload",
+        "Input validation prevents obviously incomplete arc-flash requests before calculation",
+        "Saved diagrams remain backward-compatible and do not accidentally persist transient arc-flash results",
+        "Typecheck/build passes"
+      ],
+      "priority": 13,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Keep the arc-flash input model minimal but explicit so standards-specific calculation logic can evolve without rewriting the UI contract."
+    },
+    {
+      "id": "US-014",
+      "title": "Implement backend arc-flash incident energy calculations",
+      "description": "As a power system engineer, I want the backend to calculate incident energy and arc-flash boundary values so the app can produce actionable arc-flash study results from the shared network model.",
+      "acceptanceCriteria": [
+        "Backend accepts arc-flash study requests with explicit Pydantic models and clear validation errors",
+        "Arc-flash calculations derive required intermediate values from the shared network and applicable study inputs instead of using placeholder constants",
+        "Response includes incident energy, arc-flash boundary, and any important calculation assumptions or limitations",
+        "Unsupported equipment or standards cases fail with concise user-facing messages",
+        "Backend verification passes for at least one representative arc-flash scenario"
+      ],
+      "priority": 14,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Build the calculation engine around explicit assumptions and expose limitations clearly where the electrical model or standard support is incomplete."
+    },
+    {
+      "id": "US-015",
+      "title": "Render arc-flash results on the frontend",
+      "description": "As a power system engineer, I want arc-flash results shown in the app so I can review incident energy outcomes and affected equipment without leaving the single-line workflow.",
+      "acceptanceCriteria": [
+        "Arc-flash results panel shows incident energy, arc-flash boundary, and key assumptions in a readable format",
+        "Relevant buses or equipment can display transient arc-flash annotations without polluting persisted graph data",
+        "Running a new arc-flash study replaces stale arc-flash annotations and results cleanly",
+        "Frontend handles empty, loading, error, and content states for arc-flash studies",
+        "Typecheck/build passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 15,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Follow the same transient-results discipline used by short-circuit studies while tailoring the presentation for safety review."
+    },
+    {
+      "id": "US-016",
+      "title": "Add arc-flash labels, PPE guidance, and study feedback",
+      "description": "As a safety reviewer, I want arc-flash outputs translated into practical review guidance so I can quickly identify high-energy locations and missing assumptions.",
+      "acceptanceCriteria": [
+        "Arc-flash results include derived safety labels such as PPE category or severity bands when the underlying assumptions support them",
+        "The UI highlights missing assumptions, calculation limitations, or low-confidence cases separately from numeric results",
+        "Arc-flash outputs avoid presenting unsupported labels when the selected method cannot justify them",
+        "Frontend and backend validation remain aligned on which assumptions are required for guidance output",
+        "Typecheck/build passes"
+      ],
+      "priority": 16,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Keep safety guidance traceable to the calculation assumptions so the UI does not overstate engineering certainty."
+    },
+    {
+      "id": "US-017",
+      "title": "Add representative verification coverage for arc-flash studies",
+      "description": "As a maintainer, I want automated verification for arc-flash study behavior so future changes do not silently break the new workflow or its electrical outputs.",
+      "acceptanceCriteria": [
+        "Project includes representative automated or scripted verification for the arc-flash request model and calculation path",
+        "At least one sample network validates a successful arc-flash study response",
+        "At least one validation case covers missing or invalid arc-flash assumptions",
+        "Documented quality checks include the arc-flash workflow alongside the existing study types"
+      ],
+      "priority": 17,
+      "implemented": false,
+      "accepted": false,
+      "notes": "Extend the existing representative-study verification strategy rather than inventing a separate testing approach for arc-flash."
     }
   ]
 }

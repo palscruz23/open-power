@@ -83,6 +83,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - persistence sanitization
 - Short-circuit canvas annotation context should stay in transient node fields only; if you add fault metadata for display, update both `sanitizeGraphForPersistence()` and the short-circuit/load-flow reset paths so saved diagrams do not retain study results.
 - Protection-device inputs live under each node's persistent `data.protection` object on protection-eligible assets; if you change the protection model, update both the `ControlPanel.jsx` editor and `LoadFlowStudyPage.jsx` payload mapping together so backend validation receives the same structured fields the UI edits.
+- Advanced-study validation should fail early in both layers: keep `LoadFlowStudyPage.jsx` preflight checks aligned with backend protection/short-circuit validation for disconnected assets, unsupported protection modes, and other study-blocking topology issues so the canvas clears stale results before the request and the backend still enforces the same rule set.
 - Shared frontend study payload construction now lives in `frontend/src/utils/networkPayload.js`; extend `buildNetworkModel()` for base graph fields and the per-study builders there instead of adding another inline serializer in `LoadFlowStudyPage.jsx`.
 - Study tabs that do not have backend calculation support yet should keep draft inputs and readiness state in local React state (`LoadFlowStudyPage.jsx` / `ControlPanel.jsx`) instead of persisting them on nodes, edges, or the shared network payload.
 - Protection coordination responses now return validated device summaries plus a top-level `curves` array; keep future protection analysis and charting work aligned to that response shape instead of inventing a parallel payload.
@@ -141,6 +142,7 @@ strictly internal.
 Protection coordination notes:
 - The backend derives TCC points from device settings plus calculated load-flow and short-circuit currents; avoid replacing those values with frontend-only demo data.
 - Transformer-attached protection devices currently infer the protected side by comparing the configured pickup current against the transformer's rated HV and LV currents; keep that heuristic in mind if you extend transformer protection inputs.
+- Shared backend sample networks for regression coverage live in `backend/test_study_samples.py`; extend those payload builders first when adding representative study verification so load-flow, short-circuit, and protection suites stay aligned on the same maintained fixtures.
 
 ## 7. Workflow Files
 

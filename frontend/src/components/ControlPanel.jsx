@@ -370,7 +370,43 @@ function formatBranchEndpoint(branches, branchId) {
   return `${fromBus} -> ${toBus}`;
 }
 
-function renderShortCircuitResults(result) {
+function renderShortCircuitResults(result, error, isLoading) {
+  if (isLoading) {
+    return (
+      <div className="study-result study-result--shortcircuit">
+        <h4>Short-Circuit Results</h4>
+        <div className="result-state-card result-state-card--loading">
+          <strong>Calculating short-circuit duty</strong>
+          <span>Solving the selected fault case and branch contributions.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="study-result study-result--shortcircuit">
+        <h4>Short-Circuit Results</h4>
+        <div className="result-state-card result-state-card--error">
+          <strong>Short-circuit study failed</strong>
+          <span>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="study-result study-result--shortcircuit">
+        <h4>Short-Circuit Results</h4>
+        <div className="result-state-card">
+          <strong>No short-circuit run yet</strong>
+          <span>Select a fault bus and run the study to review fault current results.</span>
+        </div>
+      </div>
+    );
+  }
+
   const fault = result?.fault;
   const faultBus = result?.fault_bus;
   const limitations = Array.isArray(fault?.limitations) ? fault.limitations : [];
@@ -1190,22 +1226,14 @@ export default function ControlPanel({
         </div>
       )}
 
-      {!isProtection && !isArcFlash && error && <pre className="error">{error}</pre>}
       {isProtection ? (
         renderProtectionResults(result, error, isStudyRunning)
-      ) : isArcFlash ? (
-        renderArcFlashResults({
-          reviewRequested: arcFlashReviewRequested,
-          workingDistanceMm: arcFlashWorkingDistanceMm,
-          equipmentClass: arcFlashEquipmentClass,
-          method: arcFlashMethod
-        })
+      ) : isShortCircuit ? (
+        renderShortCircuitResults(result, error, isStudyRunning)
       ) : result ? (
-        isShortCircuit ? (
-          renderShortCircuitResults(result)
-        ) : (
-          <pre className="result">{JSON.stringify(result, null, 2)}</pre>
-        )
+        <pre className="result">{JSON.stringify(result, null, 2)}</pre>
+      ) : error ? (
+        <pre className="error">{error}</pre>
       ) : null}
     </section>
   );
