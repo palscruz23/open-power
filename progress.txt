@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
+- Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - UI-only study tabs should keep draft inputs and readiness/run state in local React state rather than extending `buildNetworkModel()` or persisting extra study data into the shared graph.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
@@ -168,22 +169,19 @@
   - The load-flow auto-slack fallback is acceptable for generic network solving but should not be treated as a real source for short-circuit or protection coordination workflows.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---
-## 2026-03-10 09:53:15 +10:30 - US-010
-- Hardened advanced-study validation with clearer backend failures for duplicate or impossible network topology, disconnected protection-device assignments, and unsupported protection ground-mode coordination requests.
-- Added frontend preflight validation and API error normalization so short-circuit and protection coordination failures surface as specific result-state messages without leaving stale advanced-study output in place.
-- Files changed: `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_protection.py`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/components/ControlPanel.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
-- **Learnings for future iterations:**
-  - Short-circuit and protection validation should reject impossible topology before calling the study engine; `build_network()` is the shared place for reusable network-shape checks like duplicate buses and self-connected lines.
-  - Protection-device preflight in `LoadFlowStudyPage.jsx` should mirror backend rules for disconnected assets and unsupported phase modes so users get immediate guidance, but backend validation in `backend/main.py` still needs to remain authoritative.
-  - Short-circuit result UX now belongs in the same loading/error/content pattern as protection coordination inside `frontend/src/components/ControlPanel.jsx`; avoid dropping advanced-study failures back to the generic raw-error `<pre>` surface.
-  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_protection backend.test_load_flow` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable in this session and the skill itself was not present.
+## [2026-03-10T00:35:31Z] - US-010 (runner)
+- Runner executed Codex session for US-010 - Harden validation and user feedback for advanced studies
+- Exit code: 0
+- Files changed in working tree after run:
+  - none
+- Latest commit: b8d7f59 feat: [US-010] - [Harden validation and user feedback for advanced studies]
 ---
-## 2026-03-10 10:54:59 +10:30 - US-011
-- Expanded representative backend verification coverage to assert concrete load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination outputs against the shared sample networks.
-- Documented the representative verification command and full backend regression command in `README.md`, and recorded the shared sample-fixture pattern in `AGENTS.md`.
-- Files changed: `backend/test_representative_studies.py`, `README.md`, `AGENTS.md`, `prd.json`, `progress.txt`
+## 2026-03-10 11:07:35 +10:30 - US-011
+- Added shared representative backend study fixtures in `backend/test_study_samples.py` and a dedicated verification suite in `backend/test_study_verification.py` covering load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination outputs.
+- Documented the shared verification-fixture pattern in `AGENTS.md` so future backend study coverage extends the common sample networks instead of duplicating payload setup.
+- Files changed: `backend/test_study_samples.py`, `backend/test_study_verification.py`, `AGENTS.md`, `prd.json`, `progress.txt`
 - **Learnings for future iterations:**
-  - Keep representative verification focused on stable response-contract fields like branch result keys, study labels, and summary/device metadata instead of asserting transient implementation details.
-  - The shared sample payload builders in `backend/test_study_samples.py` are the right place to evolve representative multi-study fixtures when new study coverage is added.
-  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_representative_studies` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_representative_studies` passed.
+  - Representative backend study checks are easiest to maintain when they share payload builders and assert against stable output fields already used by the current study contracts.
+  - Load-flow line results expose directional currents as `i_from_ka` / `i_to_ka` plus `loading_percent`; do not assume a generic line `current_ka` field when adding verification.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -c "import backend.main; print('backend import ok')"` passed.
 ---

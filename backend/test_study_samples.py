@@ -1,8 +1,16 @@
+from copy import deepcopy
+
 from backend.main import LoadFlowInput, ProtectionStudyInput, ShortCircuitInput
 
 
-def make_load_flow_payload(**overrides):
-    payload = {
+def _deep_update(base, overrides):
+    payload = deepcopy(base)
+    payload.update(overrides)
+    return payload
+
+
+def make_radial_network_payload(**overrides):
+    base = {
         'buses': [
             {'id': 'bus-1', 'name': 'Source', 'vn_kv': 11.0},
             {'id': 'bus-2', 'name': 'Load Bus', 'vn_kv': 11.0},
@@ -26,47 +34,36 @@ def make_load_flow_payload(**overrides):
             {'id': 'source-1', 'bus': 'bus-1', 'p_mw': 0.0, 'vm_pu': 1.0}
         ],
         'transformers': [],
+        'protection_devices': [],
     }
-    payload.update(overrides)
-    return LoadFlowInput(**payload)
+    return _deep_update(base, overrides)
+
+
+def make_load_flow_payload(**overrides):
+    return LoadFlowInput(**make_radial_network_payload(**overrides))
+
+
+def make_load_flow_input(**overrides):
+    return make_load_flow_payload(**overrides)
 
 
 def make_short_circuit_payload(**overrides):
-    payload = {
+    base = {
         'standard': 'ansi',
         'fault_bus_id': 'bus-2',
         'fault_type': 'three_phase',
         'current_type': 'initial_symmetrical',
-        'buses': [
-            {'id': 'bus-1', 'name': 'Source', 'vn_kv': 11.0},
-            {'id': 'bus-2', 'name': 'Load Bus', 'vn_kv': 11.0},
-        ],
-        'lines': [
-            {
-                'id': 'line-1',
-                'from_bus': 'bus-1',
-                'to_bus': 'bus-2',
-                'length_km': 1.0,
-                'r_ohm_per_km': 0.08,
-                'x_ohm_per_km': 0.12,
-                'c_nf_per_km': 10.0,
-                'max_i_ka': 1.0,
-            }
-        ],
-        'loads': [
-            {'id': 'load-1', 'bus': 'bus-2', 'p_mw': 1.0, 'q_mvar': 0.2, 'load_type': 'static'}
-        ],
-        'generators': [
-            {'id': 'source-1', 'bus': 'bus-1', 'p_mw': 0.0, 'vm_pu': 1.0}
-        ],
-        'transformers': [],
     }
-    payload.update(overrides)
-    return ShortCircuitInput(**payload)
+    base.update(overrides)
+    return ShortCircuitInput(**make_radial_network_payload(**base))
+
+
+def make_short_circuit_input(**overrides):
+    return make_short_circuit_payload(**overrides)
 
 
 def make_protection_payload(**overrides):
-    payload = {
+    base = {
         'coordination_margin_s': 0.3,
         'buses': [
             {'id': 'bus-1', 'name': 'Source', 'vn_kv': 33.0},
@@ -123,5 +120,8 @@ def make_protection_payload(**overrides):
             },
         ],
     }
-    payload.update(overrides)
-    return ProtectionStudyInput(**payload)
+    return ProtectionStudyInput(**_deep_update(base, overrides))
+
+
+def make_protection_study_input(**overrides):
+    return make_protection_payload(**overrides)
