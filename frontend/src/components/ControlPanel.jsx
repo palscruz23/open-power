@@ -1359,6 +1359,13 @@ export default function ControlPanel({
 
       {isProtection ? (
         renderProtectionResults(result, error, isStudyRunning)
+      ) : isArcFlash ? (
+        renderArcFlashResults({
+          reviewRequested: arcFlashReviewRequested,
+          workingDistanceMm: arcFlashWorkingDistanceMm,
+          equipmentClass: arcFlashEquipmentClass,
+          method: arcFlashMethod
+        })
       ) : isShortCircuit ? (
         renderShortCircuitResults(result, error, isStudyRunning)
       ) : isArcFlash ? (
