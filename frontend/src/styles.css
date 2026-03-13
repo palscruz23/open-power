@@ -447,6 +447,22 @@ body {
   color: #642a26;
 }
 
+.arcflash-metrics {
+  margin-top: 0.2rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #e2c58f;
+  border-radius: 4px;
+  background: #fff8eb;
+  font-size: 0.66rem;
+  color: #7c3d12;
+}
+
+.arcflash-context {
+  margin-bottom: 0.1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
 .fault-context {
   margin-bottom: 0.1rem;
   font-weight: 700;
@@ -506,6 +522,22 @@ body {
   border: none;
   background: none;
   color: #7a1c14;
+  font-size: 0.67rem;
+  line-height: 1.25;
+  max-width: 180px;
+  white-space: normal;
+}
+
+.arcflash-metrics--bus-side {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: calc(50% + 38px);
+  transform: translateY(-50%);
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #9a3412;
   font-size: 0.67rem;
   line-height: 1.25;
   max-width: 180px;
@@ -594,6 +626,10 @@ pre {
 .result-summary-grid strong {
   display: block;
   font-size: 0.85rem;
+}
+
+.result-summary-grid--arcflash {
+  margin-bottom: 0;
 }
 
 .result-note,

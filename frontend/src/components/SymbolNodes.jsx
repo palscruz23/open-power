@@ -11,6 +11,18 @@ function formatValue(value, fallback = 0) {
   return numberFormatter.format(Number.isFinite(numericValue) ? numericValue : fallback);
 }
 
+function formatArcFlashEnergy(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) return null;
+  return `${formatValue(numericValue)} cal/cm2`;
+}
+
+function formatArcFlashBoundary(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return null;
+  return `${formatValue(numericValue)} mm`;
+}
+
 function getRatingItems(type, data) {
   if (!data) return [];
 
@@ -68,6 +80,9 @@ function NodeShell({
   const hasLoadFlowResult = Boolean(
     data?.loadFlowCurrentKa != null || data?.loadFlowVoltageKv != null
   );
+  const hasArcFlashResult = Boolean(
+    data?.arcFlashIncidentEnergyCalCm2 != null || data?.arcFlashBoundaryMm != null
+  );
   const hasRatings = showRating && ratingItems.length > 0;
 
   return (
@@ -108,6 +123,19 @@ function NodeShell({
           )}
         </div>
       )}
+      {hasArcFlashResult && (
+        <div className="arcflash-metrics">
+          {data?.arcFlashLabel && <div className="arcflash-context">{data.arcFlashLabel}</div>}
+          {data?.arcFlashEquipmentLabel && <div>{data.arcFlashEquipmentLabel}</div>}
+          {formatArcFlashEnergy(data?.arcFlashIncidentEnergyCalCm2) && (
+            <div>IE: {formatArcFlashEnergy(data.arcFlashIncidentEnergyCalCm2)}</div>
+          )}
+          {formatArcFlashBoundary(data?.arcFlashBoundaryMm) && (
+            <div>AFB: {formatArcFlashBoundary(data.arcFlashBoundaryMm)}</div>
+          )}
+          {data?.arcFlashHazardLabel && <div>{data.arcFlashHazardLabel}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -119,6 +147,9 @@ export function BusNode({ data }) {
     data?.loadFlowVoltageKv != null ||
       data?.loadFlowIncomingCurrentKa != null ||
       data?.loadFlowOutgoingCurrentKa != null
+  );
+  const hasArcFlashResult = Boolean(
+    data?.arcFlashIncidentEnergyCalCm2 != null || data?.arcFlashBoundaryMm != null
   );
   const isFaultHighlighted = Boolean(data?.isFaulted || data?.isFaultSelected);
 
@@ -167,6 +198,19 @@ export function BusNode({ data }) {
           {data?.faultContextLabel && <div className="fault-context">{data.faultContextLabel}</div>}
           <div>{data?.faultCurrentLabel || 'Isc'} {formatCurrentFromKa(data.faultCurrentKa)}</div>
           <div>Vn {formatVoltageFromKv(data.faultVoltageKv)}</div>
+        </div>
+      )}
+      {hasArcFlashResult && (
+        <div className="arcflash-metrics arcflash-metrics--bus-side">
+          {data?.arcFlashLabel && <div className="arcflash-context">{data.arcFlashLabel}</div>}
+          {data?.arcFlashEquipmentLabel && <div>{data.arcFlashEquipmentLabel}</div>}
+          {formatArcFlashEnergy(data?.arcFlashIncidentEnergyCalCm2) && (
+            <div>IE {formatArcFlashEnergy(data.arcFlashIncidentEnergyCalCm2)}</div>
+          )}
+          {formatArcFlashBoundary(data?.arcFlashBoundaryMm) && (
+            <div>AFB {formatArcFlashBoundary(data.arcFlashBoundaryMm)}</div>
+          )}
+          {data?.arcFlashHazardLabel && <div>{data.arcFlashHazardLabel}</div>}
         </div>
       )}
     </div>
