@@ -52,6 +52,9 @@ require_cmd node
 require_cmd codex
 require_cmd gh
 
+echo "[ralph] Fetching latest remote refs"
+git -C "$ROOT_DIR" fetch origin --prune
+
 if [[ ! -f "$PROGRESS_FILE" ]]; then
   cat > "$PROGRESS_FILE" <<'EOF'
 ## Codebase Patterns
@@ -98,10 +101,20 @@ if [[ "$current_branch" != "$branch_name" ]]; then
   if git -C "$ROOT_DIR" show-ref --verify --quiet "refs/heads/$branch_name"; then
     echo "[ralph] Checking out existing branch $branch_name"
     git -C "$ROOT_DIR" checkout "$branch_name"
+    if git -C "$ROOT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+      echo "[ralph] Rebasing $branch_name onto origin/$branch_name"
+      git -C "$ROOT_DIR" rebase "origin/$branch_name"
+    fi
+  elif git -C "$ROOT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+    echo "[ralph] Checking out remote branch $branch_name"
+    git -C "$ROOT_DIR" checkout -b "$branch_name" --track "origin/$branch_name"
   else
-    echo "[ralph] Creating branch $branch_name from main"
-    git -C "$ROOT_DIR" checkout -b "$branch_name" main
+    echo "[ralph] Creating branch $branch_name from origin/main"
+    git -C "$ROOT_DIR" checkout -b "$branch_name" "origin/main"
   fi
+elif git -C "$ROOT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+  echo "[ralph] Rebasing current branch $branch_name onto origin/$branch_name"
+  git -C "$ROOT_DIR" rebase "origin/$branch_name"
 fi
 
 tmp_prompt="$(mktemp)"
