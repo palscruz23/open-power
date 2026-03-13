@@ -47,6 +47,12 @@ const TRANSIENT_NODE_DATA_KEYS = new Set([
   'faultVoltageKv',
   'faultCurrentLabel',
   'faultContextLabel',
+  'arcFlashLabel',
+  'arcFlashIncidentEnergyCalCm2',
+  'arcFlashBoundaryMm',
+  'arcFlashWorkingDistanceMm',
+  'arcFlashHazardLabel',
+  'arcFlashEquipmentLabel',
   'loadFlowCurrentKa',
   'loadFlowVoltageKv',
   'loadFlowIncomingCurrentKa',
@@ -393,6 +399,23 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     );
   }, [setNodes, setEdges]);
 
+  const clearArcFlashAnnotations = useCallback(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          arcFlashLabel: undefined,
+          arcFlashIncidentEnergyCalCm2: undefined,
+          arcFlashBoundaryMm: undefined,
+          arcFlashWorkingDistanceMm: undefined,
+          arcFlashHazardLabel: undefined,
+          arcFlashEquipmentLabel: undefined
+        }
+      }))
+    );
+  }, [setNodes]);
+
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
@@ -737,9 +760,15 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                 ? '/api/calculate/protection-coordination'
                 : '/api/calculate/arc-flash';
 
+        if (studyType === 'loadflow') {
+          clearShortCircuitAnnotations();
+          clearArcFlashAnnotations();
+        }
+
         if (studyType === 'shortcircuit') {
           clearLoadFlowAnnotations();
           clearShortCircuitAnnotations();
+          clearArcFlashAnnotations();
           const validationError = validateShortCircuitRun();
           if (validationError) {
             setError(validationError);
@@ -760,6 +789,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         }
 
         if (studyType === 'protection') {
+          clearArcFlashAnnotations();
           if (networkModel.protection_devices.length === 0) {
             setError('Attach at least one protection device before running protection coordination.');
             return;
@@ -804,6 +834,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           }
         }
         if (studyType === 'arcflash') {
+          clearLoadFlowAnnotations();
+          clearShortCircuitAnnotations();
+          clearArcFlashAnnotations();
           const validationError = validateArcFlashRun();
           if (validationError) {
             setError(validationError);
@@ -1100,7 +1133,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               };
             })
           );
-        } else {
+        } else if (studyType === 'loadflow') {
           const busResults = response.data?.buses || {};
           const lineResults = response.data?.lines || {};
           const loadResults = response.data?.loads || {};
@@ -1280,6 +1313,84 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               };
             })
           );
+        } else if (studyType === 'arcflash') {
+          const arcFlashResult = response.data || {};
+          const assumptions = arcFlashResult.assumptions || {};
+          const studyBusId = assumptions.study_bus_id || arcFlashStudyBusId;
+
+          const incidentEnergyCalCm2 =
+            Number(
+              arcFlashResult.incident_energy_cal_cm2 ??
+                arcFlashResult.incident_energy?.cal_cm2 ??
+                arcFlashResult.summary?.incident_energy_cal_cm2
+            ) || null;
+          const boundaryMm =
+            Number(
+              arcFlashResult.arc_flash_boundary_mm ??
+                arcFlashResult.arc_flash_boundary?.mm ??
+                arcFlashResult.summary?.arc_flash_boundary_mm
+            ) || null;
+          const workingDistanceMm =
+            Number(
+              assumptions.working_distance_mm ??
+                arcFlashResult.summary?.working_distance_mm ??
+                arcFlashWorkingDistanceMm
+            ) || null;
+          const hazardLabel =
+            arcFlashResult.hazard_category ||
+            arcFlashResult.summary?.hazard_category ||
+            arcFlashResult.ppe_category ||
+            arcFlashResult.summary?.ppe_category ||
+            null;
+          const arcFlashLabel =
+            arcFlashResult.summary?.label ||
+            (assumptions.method === 'ieee_1584' ? 'IEEE 1584 Arc Flash' : 'Arc Flash');
+          const equipmentLabel = assumptions.equipment_label || arcFlashEquipmentLabel.trim();
+
+          setNodes((currentNodes) =>
+            currentNodes.map((node) => {
+              if (node.id !== studyBusId) {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    arcFlashLabel: undefined,
+                    arcFlashIncidentEnergyCalCm2: undefined,
+                    arcFlashBoundaryMm: undefined,
+                    arcFlashWorkingDistanceMm: undefined,
+                    arcFlashHazardLabel: undefined,
+                    arcFlashEquipmentLabel: undefined
+                  }
+                };
+              }
+
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  arcFlashLabel,
+                  arcFlashIncidentEnergyCalCm2: incidentEnergyCalCm2,
+                  arcFlashBoundaryMm: boundaryMm,
+                  arcFlashWorkingDistanceMm: workingDistanceMm,
+                  arcFlashHazardLabel: hazardLabel,
+                  arcFlashEquipmentLabel: equipmentLabel
+                }
+              };
+            })
+          );
+          setEdges((currentEdges) =>
+            currentEdges.map((edge) => ({
+              ...edge,
+              label: undefined,
+              labelStyle: undefined,
+              labelShowBg: undefined,
+              markerStart: undefined,
+              markerEnd: undefined,
+              style: { stroke: '#b8bec7', strokeWidth: 3 }
+            }))
+          );
+        } else {
+          clearArcFlashAnnotations();
         }
         setResult(response.data);
       } catch (err) {
@@ -1304,6 +1415,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       shortCircuitFaultType,
       shortCircuitCurrentType,
       clearLoadFlowAnnotations,
+      clearArcFlashAnnotations,
       clearShortCircuitAnnotations,
       validateArcFlashRun,
       validateProtectionRun,

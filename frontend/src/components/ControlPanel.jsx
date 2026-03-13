@@ -62,6 +62,30 @@ function formatProtectionSettingSource(curve) {
   return parts.join(' | ');
 }
 
+function formatArcFlashMethod(value) {
+  if (value === 'ieee_1584') return 'IEEE 1584';
+  return value || '-';
+}
+
+function formatArcFlashEnergy(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) return '-';
+  return `${numericValue.toFixed(numericValue >= 10 ? 1 : 2)} cal/cm2`;
+}
+
+function formatArcFlashBoundary(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '-';
+  if (numericValue >= 1000) return `${(numericValue / 1000).toFixed(2)} m`;
+  return `${numericValue.toFixed(0)} mm`;
+}
+
+function formatArcFlashWorkingDistance(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return '-';
+  return `${numericValue.toFixed(0)} mm`;
+}
+
 function buildLogTicks(minValue, maxValue) {
   const safeMin = clampLogDomain(minValue, 1);
   const safeMax = clampLogDomain(maxValue, safeMin * 10);
@@ -690,11 +714,55 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   const assumptions = result?.assumptions || {};
   const clearing = assumptions?.fault_clearing || {};
   const limitations = Array.isArray(result?.limitations) ? result.limitations : [];
+  const incidentEnergy =
+    result?.incident_energy_cal_cm2 ??
+    result?.incident_energy?.cal_cm2 ??
+    result?.summary?.incident_energy_cal_cm2;
+  const boundary =
+    result?.arc_flash_boundary_mm ??
+    result?.arc_flash_boundary?.mm ??
+    result?.summary?.arc_flash_boundary_mm;
+  const workingDistance = assumptions?.working_distance_mm ?? result?.summary?.working_distance_mm;
+  const hasCalculatedOutputs =
+    Number.isFinite(Number(incidentEnergy)) || Number.isFinite(Number(boundary));
+  const keyAssumptions = [
+    {
+      label: 'Equipment Class',
+      description: 'Equipment class used for the study request.',
+      value: assumptions?.equipment_class || '-'
+    },
+    {
+      label: 'Enclosure Type',
+      description: 'Enclosed or open-air working assumption.',
+      value: assumptions?.enclosure_type || '-'
+    },
+    {
+      label: 'Bus Voltage',
+      description: 'Nominal voltage at the selected study bus.',
+      value:
+        assumptions?.study_bus_voltage_kv != null ? `${assumptions.study_bus_voltage_kv} kV` : '-'
+    },
+    {
+      label: 'Working Distance',
+      description: 'Distance used for incident-energy evaluation.',
+      value: formatArcFlashWorkingDistance(workingDistance)
+    },
+    {
+      label: 'Clearing Assumption',
+      description: 'Fault-clearing basis applied to the study.',
+      value: clearing?.assumption_label || '-'
+    }
+  ];
 
   return (
     <div className="study-result study-result--arcflash">
-      <h4>Arc-Flash Study Status</h4>
-      <p className="result-note">{result?.message || 'Arc-flash inputs validated.'}</p>
+      <h4>{hasCalculatedOutputs ? 'Arc-Flash Results' : 'Arc-Flash Study Status'}</h4>
+      <p className="result-note">
+        {result?.message ||
+          (hasCalculatedOutputs
+            ? 'Arc-flash results returned.'
+            : 'Arc-flash inputs validated. Calculation outputs remain unavailable.')}
+      </p>
       <div className="result-summary-grid">
         <div>
           <span>Status</span>
@@ -702,7 +770,7 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
         </div>
         <div>
           <span>Method</span>
-          <strong>{assumptions?.method === 'ieee_1584' ? 'IEEE 1584' : assumptions?.method || '-'}</strong>
+          <strong>{formatArcFlashMethod(assumptions?.method)}</strong>
         </div>
         <div>
           <span>Study Bus</span>
@@ -714,7 +782,7 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
         </div>
         <div>
           <span>Working Distance</span>
-          <strong>{assumptions?.working_distance_mm ?? '-'} mm</strong>
+          <strong>{formatArcFlashWorkingDistance(workingDistance)}</strong>
         </div>
         <div>
           <span>Clearing Assumption</span>
@@ -722,29 +790,44 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
         </div>
       </div>
       <div className="result-section">
-        <h5>Working Assumptions</h5>
+        <h5>Safety Review</h5>
+        <div className="result-summary-grid result-summary-grid--arcflash">
+          <div>
+            <span>Incident Energy</span>
+            <strong>{formatArcFlashEnergy(incidentEnergy)}</strong>
+          </div>
+          <div>
+            <span>Arc-Flash Boundary</span>
+            <strong>{formatArcFlashBoundary(boundary)}</strong>
+          </div>
+          <div>
+            <span>Hazard Label</span>
+            <strong>{result?.hazard_category || result?.summary?.hazard_category || '-'}</strong>
+          </div>
+          <div>
+            <span>PPE Category</span>
+            <strong>{result?.ppe_category || result?.summary?.ppe_category || '-'}</strong>
+          </div>
+        </div>
+        {!hasCalculatedOutputs && (
+          <p className="result-empty">
+            Incident energy and arc-flash boundary values will appear here when the backend returns
+            calculated outputs.
+          </p>
+        )}
+      </div>
+      <div className="result-section">
+        <h5>Key Assumptions</h5>
         <div className="result-list">
-          <div className="result-list-row">
-            <div>
-              <strong>Equipment Class</strong>
-              <span>Equipment class used for the study request.</span>
+          {keyAssumptions.map((item) => (
+            <div className="result-list-row" key={item.label}>
+              <div>
+                <strong>{item.label}</strong>
+                <span>{item.description}</span>
+              </div>
+              <div>{item.value}</div>
             </div>
-            <div>{assumptions?.equipment_class || '-'}</div>
-          </div>
-          <div className="result-list-row">
-            <div>
-              <strong>Enclosure Type</strong>
-              <span>Enclosed or open-air working assumption.</span>
-            </div>
-            <div>{assumptions?.enclosure_type || '-'}</div>
-          </div>
-          <div className="result-list-row">
-            <div>
-              <strong>Bus Voltage</strong>
-              <span>Nominal voltage at the selected study bus.</span>
-            </div>
-            <div>{assumptions?.study_bus_voltage_kv ?? '-'} kV</div>
-          </div>
+          ))}
         </div>
       </div>
       <div className="result-section">
@@ -1359,13 +1442,6 @@ export default function ControlPanel({
 
       {isProtection ? (
         renderProtectionResults(result, error, isStudyRunning)
-      ) : isArcFlash ? (
-        renderArcFlashResults({
-          reviewRequested: arcFlashReviewRequested,
-          workingDistanceMm: arcFlashWorkingDistanceMm,
-          equipmentClass: arcFlashEquipmentClass,
-          method: arcFlashMethod
-        })
       ) : isShortCircuit ? (
         renderShortCircuitResults(result, error, isStudyRunning)
       ) : isArcFlash ? (

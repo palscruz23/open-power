@@ -8,6 +8,7 @@
 - Representative backend study coverage should reuse the shared sample payload builders in `backend/test_study_samples.py` so load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination stay aligned on the same maintained fixtures.
 - Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
 - Arc-flash study assumptions should stay ephemeral in `LoadFlowStudyPage.jsx` / `ControlPanel.jsx`, then serialize through `buildArcFlashPayload()` into the backend `ArcFlashInput` model instead of being persisted on the shared graph.
+- Arc-flash frontend results should follow the same transient discipline as short-circuit: keep overlays on node `data`, clear them in `LoadFlowStudyPage.jsx` before switching studies, and strip the keys through `TRANSIENT_NODE_DATA_KEYS` so saved diagrams stay clean.
 - Short-circuit result payloads should keep the frontend's generic `current_ka` fields stable while exposing method-aware `result_key`/`result_label` metadata and standard-specific branch keys for ANSI vs IEC outputs.
 - Short-circuit frontend updates need coordinated changes in `LoadFlowStudyPage.jsx` result resets, `SymbolNodes.jsx` fault badges, and `ControlPanel.jsx` result rendering so new fault metadata stays transient and the panel does not fall back to raw JSON.
 - Protection-device modeling is persisted on eligible node `data.protection` objects in the editor, then flattened into the shared API payload as `protection_devices`; keep those two shapes aligned whenever protection settings change.
@@ -209,4 +210,14 @@
 - **Learnings for future iterations:**
   - Placeholder study tabs still need an explicit result renderer branch in `frontend/src/components/ControlPanel.jsx`; otherwise local review state can silently fall through to the generic `result`/`error` output used by load flow.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-13 21:01:39 +10:30 - US-015
+- Reworked the arc-flash results surface so the control panel now shows empty, loading, error, and content states with dedicated safety-review cards for incident energy, arc-flash boundary, and key study assumptions when those fields are present.
+- Added transient arc-flash node annotations and reset paths in `LoadFlowStudyPage.jsx` plus canvas badges in `SymbolNodes.jsx`, keeping arc-flash overlays out of persistence through `TRANSIENT_NODE_DATA_KEYS`.
+- Fixed the arc-flash result renderer branch in `ControlPanel.jsx` so arc-flash no longer falls through the generic study output path.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `frontend/src/components/SymbolNodes.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Arc-flash frontend rendering spans the same three surfaces as short-circuit: `LoadFlowStudyPage.jsx` owns transient reset/annotation state, `SymbolNodes.jsx` draws the on-canvas badge, and `ControlPanel.jsx` owns result-state rendering.
+  - Arc-flash overlays should be cleared whenever another study redraws the canvas, otherwise stale safety annotations survive load-flow or protection runs.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; JSX parse check via `node` plus `frontend/node_modules/@babel/parser` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---

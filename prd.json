@@ -245,7 +245,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 15,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Follow the same transient-results discipline used by short-circuit studies while tailoring the presentation for safety review."
     },
