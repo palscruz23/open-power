@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
+- Protection-ready palette shortcuts should serialize as an existing asset node type plus prefilled `data.protection` defaults so the fixed node taxonomy and backend `asset_type` validation stay aligned.
 - Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
 - Arc-flash regression coverage should keep focused request-model edge cases in `backend/test_arc_flash.py` and mirror one successful sample plus one invalid-assumption case in `backend/test_study_verification.py` so the shared study suite exercises the maintained fixtures too.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
@@ -250,4 +251,13 @@
   - ANSI short-circuit support in this repo is currently a derived result path, not a separate solver: `backend/main.py` scales IEC max-case currents and must keep that conversion explicit in the response metadata.
   - Representative ANSI-vs-IEC regression checks belong in `backend/test_study_verification.py` alongside the shared sample builders so future short-circuit changes cannot silently collapse the two standards back together.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed.
+---
+## 2026-03-13 23:20:50 +10:30 - US-019
+- Added protection-ready palette presets that drop existing asset node types with preconfigured relay, recloser, or fuse settings while preserving the fixed node taxonomy.
+- Centralized frontend protection defaults/options, surfaced protection device status on symbol nodes, and expanded the control-panel editor so palette-created devices stay editable and serialize through the existing shared payload model.
+- Files changed: `frontend/src/components/Palette.jsx`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/components/SymbolNodes.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/styles.css`, `frontend/src/utils/networkPayload.js`, `frontend/src/utils/protectionDefaults.js`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Protection palette shortcuts should create supported asset nodes with `data.protection` defaults instead of inventing new node types; that keeps the palette, editor, payload mapping, and backend `asset_type` validation aligned.
+  - Shared protection defaults and option lists are now centralized in `frontend/src/utils/protectionDefaults.js`; extend that file first when changing protection palette presets or editor defaults.
+  - Checks run this iteration: `cmd /c npm run build` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `git diff --check` passed; parser-level JSX/module validation across edited frontend files via local `@babel/parser` passed; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---

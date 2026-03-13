@@ -1,10 +1,4 @@
-const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
-  'load',
-  'resistive_load',
-  'generator',
-  'utility',
-  'transformer'
-]);
+import { PROTECTION_ELIGIBLE_NODE_TYPES } from './protectionDefaults';
 
 export function buildNetworkModel(nodes, edges, resolveConnectedBus) {
   const buses = nodes

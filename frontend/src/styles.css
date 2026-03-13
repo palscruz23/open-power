@@ -148,6 +148,15 @@ body {
   gap: 0.3rem;
 }
 
+.palette-item--selected {
+  border-color: #0f3f8a;
+  box-shadow: 0 0 0 2px rgba(15, 63, 138, 0.12);
+}
+
+.palette-item--protection {
+  background: #eef6ff;
+}
+
 .palette-item__preview {
   width: 100%;
   min-height: 58px;
@@ -194,6 +203,17 @@ body {
 
 .palette-item--transformer .palette-item__preview {
   color: #4338ca;
+}
+
+.palette-item--protection .palette-item__label::after {
+  content: 'Protection';
+  display: block;
+  margin-top: 0.18rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0f3f8a;
+  text-transform: uppercase;
 }
 
 .canvas {
@@ -307,6 +327,18 @@ body {
   color: #27303c;
   text-align: center;
   line-height: 1.1;
+}
+
+.protection-chip {
+  max-width: 108px;
+  padding: 0.14rem 0.45rem;
+  border-radius: 999px;
+  background: #e1effe;
+  color: #0f3f8a;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .symbol-handle {
