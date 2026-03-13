@@ -97,6 +97,11 @@ branch_name="${branch_prefix}/${task_id,,}-${task_slug}"
 echo "[ralph] Working on $task_id - $task_title"
 
 current_branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
+base_ref="origin/main"
+if [[ "$current_branch" == "${branch_prefix}/"* ]]; then
+  base_ref="$current_branch"
+fi
+
 if [[ "$current_branch" != "$branch_name" ]]; then
   if git -C "$ROOT_DIR" show-ref --verify --quiet "refs/heads/$branch_name"; then
     echo "[ralph] Checking out existing branch $branch_name"
@@ -109,8 +114,8 @@ if [[ "$current_branch" != "$branch_name" ]]; then
     echo "[ralph] Checking out remote branch $branch_name"
     git -C "$ROOT_DIR" checkout -b "$branch_name" --track "origin/$branch_name"
   else
-    echo "[ralph] Creating branch $branch_name from origin/main"
-    git -C "$ROOT_DIR" checkout -b "$branch_name" "origin/main"
+    echo "[ralph] Creating branch $branch_name from $base_ref"
+    git -C "$ROOT_DIR" checkout -b "$branch_name" "$base_ref"
   fi
 elif git -C "$ROOT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
   echo "[ralph] Rebasing current branch $branch_name onto origin/$branch_name"
