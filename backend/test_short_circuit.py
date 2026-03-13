@@ -18,6 +18,9 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertEqual(result['fault']['current_type_label'], 'ANSI symmetrical RMS current')
         self.assertEqual(result['fault']['current_result_key'], 'ikss_ka')
         self.assertTrue(result['fault']['limitations'])
+        self.assertEqual(result['fault']['voltage_factor_mode'], 'nominal_from_iec_max')
+        self.assertAlmostEqual(result['fault']['applied_voltage_factor'], 1.1)
+        self.assertAlmostEqual(result['fault']['current_scale'], 1 / 1.1, places=5)
         self.assertGreater(result['fault_bus']['current_ka'], 0.0)
 
         self.assertIn('line-1', result['branches'])
@@ -112,6 +115,18 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertIsNone(branch['from_ikss_ka'])
         self.assertIsNone(branch['to_ikss_ka'])
         self.assertIsNone(branch['ikss_ka'])
+
+    def test_ansi_and_iec_initial_symmetrical_results_are_not_silent_aliases(self):
+        ansi_result = calculate_short_circuit(self.make_payload())
+        iec_result = calculate_short_circuit(self.make_payload(standard='iec_60909'))
+
+        self.assertLess(ansi_result['fault_bus']['current_ka'], iec_result['fault_bus']['current_ka'])
+        self.assertLess(
+            ansi_result['branches']['line-1']['contribution_ka'],
+            iec_result['branches']['line-1']['contribution_ka']
+        )
+        self.assertIn('derived from the IEC 60909 max-case engine', ansi_result['fault']['limitations'][2])
+        self.assertEqual(iec_result['fault']['limitations'], [])
 
     def test_short_circuit_accepts_protection_device_metadata_without_breaking_results(self):
         result = calculate_short_circuit(

@@ -20,6 +20,7 @@
 - Advanced-study validation should be duplicated intentionally: `LoadFlowStudyPage.jsx` should preflight disconnected protection assets and unsupported study modes for fast UI feedback, while `backend/main.py` must enforce the same rules with explicit HTTP 400 messages.
 - Arc-flash backend results should reuse the existing short-circuit and protection helpers for available fault current and device clearing time, then expose study outputs through `summary`, `assumptions`, `calculation`, and `limitations` blocks so the frontend can extend rendering without a second payload shape.
 - Arc-flash safety review labels should be emitted from a dedicated backend `guidance` block; keep frontend PPE/severity rendering and transient canvas labels tied to that block instead of inferring guidance from raw numeric summary fields.
+- ANSI short-circuit outputs are currently derived from the pandapower IEC 60909 max-case engine by applying a nominal-voltage conversion; keep the limitation messaging and `voltage_factor_mode` / `current_scale` metadata aligned whenever that path changes so ANSI does not silently alias IEC duties.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -240,4 +241,13 @@
   - The shared representative suite is the maintained verification entry point for cross-study samples; if arc-flash validation rules change, mirror one representative failure there in addition to any focused unit checks in `backend/test_arc_flash.py`.
   - Keep README verification commands aligned with the actual unittest module names; this repo now uses `backend.test_study_verification`, not the older `backend.test_representative_studies`.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed.
+---
+## 2026-03-13 23:12:17 +10:30 - US-018
+- Differentiated ANSI short-circuit duties from IEC 60909 max-case results by applying an ANSI-oriented nominal-voltage conversion in the backend instead of returning raw IEC values under ANSI labels.
+- Added explicit ANSI engine-limitation metadata and verification that the representative ANSI and IEC sample runs now produce different reported fault and branch duties.
+- Files changed: `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_study_verification.py`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - ANSI short-circuit support in this repo is currently a derived result path, not a separate solver: `backend/main.py` scales IEC max-case currents and must keep that conversion explicit in the response metadata.
+  - Representative ANSI-vs-IEC regression checks belong in `backend/test_study_verification.py` alongside the shared sample builders so future short-circuit changes cannot silently collapse the two standards back together.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_short_circuit backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed.
 ---

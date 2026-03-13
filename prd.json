@@ -292,7 +292,7 @@
         "Backend verification passes for at least one network comparing ANSI and IEC outputs"
       ],
       "priority": 18,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "This task addresses the regression where ANSI and IEC currently provide the same answer."
     },
