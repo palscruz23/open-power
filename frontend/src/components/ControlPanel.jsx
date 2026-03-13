@@ -380,6 +380,11 @@ function getShortCircuitCurrentTag(fault) {
 function formatBranchEndpoint(branches, branchId) {
   const branch = branches?.[branchId];
   if (!branch) return branchId;
+  if (branch.branch_type === 'transformer') {
+    const primaryBus = branch.primary_bus_id || branch.from_bus_id || '?';
+    const secondaryBus = branch.secondary_bus_id || branch.to_bus_id || '?';
+    return `${primaryBus} primary -> ${secondaryBus} secondary`;
+  }
   const fromBus = branch.from_bus_id || '?';
   const toBus = branch.to_bus_id || '?';
   return `${fromBus} -> ${toBus}`;
@@ -428,6 +433,23 @@ function renderShortCircuitResults(result, error, isLoading) {
   const branches = Object.entries(result?.branches || {});
   const branchRows = branches
     .map(([branchId, branch]) => {
+      const endpoint = formatBranchEndpoint(result?.branches, branchId);
+      const label = branch?.result_label || fault?.current_type_label || 'Short-circuit current';
+
+      if (branch?.branch_type === 'transformer') {
+        const primaryCurrentKa = Number(branch?.primary_current_ka);
+        const secondaryCurrentKa = Number(branch?.secondary_current_ka);
+        return {
+          branchId,
+          endpoint,
+          label,
+          branchType: 'transformer',
+          primaryCurrentKa: Number.isFinite(primaryCurrentKa) && primaryCurrentKa > 0 ? primaryCurrentKa : null,
+          secondaryCurrentKa:
+            Number.isFinite(secondaryCurrentKa) && secondaryCurrentKa > 0 ? secondaryCurrentKa : null
+        };
+      }
+
       const preferredValue =
         branch?.[branch?.result_key] ??
         branch?.current_ka ??
@@ -435,19 +457,13 @@ function renderShortCircuitResults(result, error, isLoading) {
         branch?.from_current_ka ??
         branch?.to_current_ka;
       const numericValue = Number(preferredValue);
-      return Number.isFinite(numericValue) && numericValue > 0
-        ? {
-            branchId,
-            endpoint: formatBranchEndpoint(result?.branches, branchId),
-            label: branch?.result_label || fault?.current_type_label || 'Short-circuit current',
-            currentKa: numericValue
-          }
-        : {
-            branchId,
-            endpoint: formatBranchEndpoint(result?.branches, branchId),
-            label: branch?.result_label || fault?.current_type_label || 'Short-circuit current',
-            currentKa: null
-          };
+      return {
+        branchId,
+        endpoint,
+        label,
+        branchType: branch?.branch_type || 'line',
+        currentKa: Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null
+      };
     })
     .slice(0, 8);
   const currentTag = getShortCircuitCurrentTag(fault);
@@ -497,9 +513,23 @@ function renderShortCircuitResults(result, error, isLoading) {
               <div className="result-list-row" key={branch.branchId}>
                 <div>
                   <strong>{branch.endpoint}</strong>
-                  <span>{branch.label}</span>
+                  <span>
+                    {branch.branchType === 'transformer'
+                      ? `${branch.label} | Primary / Secondary`
+                      : branch.label}
+                  </span>
                 </div>
-                <div>{branch.currentKa != null ? formatCurrentFromKa(branch.currentKa) : 'Not available'}</div>
+                <div>
+                  {branch.branchType === 'transformer'
+                    ? `${branch.primaryCurrentKa != null ? formatCurrentFromKa(branch.primaryCurrentKa) : 'Not available'} / ${
+                        branch.secondaryCurrentKa != null
+                          ? formatCurrentFromKa(branch.secondaryCurrentKa)
+                          : 'Not available'
+                      }`
+                    : branch.currentKa != null
+                      ? formatCurrentFromKa(branch.currentKa)
+                      : 'Not available'}
+                </div>
               </div>
             ))}
           </div>

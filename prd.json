@@ -340,7 +340,7 @@
         "Backend verification covers at least one transformer fault case with different expected primary and secondary currents"
       ],
       "priority": 21,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Review both calculation and result-mapping paths so transformer-side currents are not duplicated incorrectly."
     }

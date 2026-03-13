@@ -3,7 +3,7 @@ import unittest
 from fastapi import HTTPException
 
 from backend.main import ShortCircuitInput, calculate_short_circuit
-from backend.test_study_samples import make_short_circuit_payload
+from backend.test_study_samples import make_short_circuit_payload, make_transformer_short_circuit_input
 
 
 class ShortCircuitTests(unittest.TestCase):
@@ -153,6 +153,18 @@ class ShortCircuitTests(unittest.TestCase):
         self.assertEqual(result['fault']['standard'], 'ansi')
         self.assertGreater(result['fault_bus']['current_ka'], 0.0)
         self.assertIn('line-1', result['branches'])
+
+    def test_transformer_short_circuit_results_expose_distinct_primary_and_secondary_currents(self):
+        result = calculate_short_circuit(make_transformer_short_circuit_input())
+
+        branch = result['branches']['line-tx-1']
+        self.assertEqual(branch['branch_type'], 'transformer')
+        self.assertEqual(branch['primary_bus_id'], 'bus-1')
+        self.assertEqual(branch['secondary_bus_id'], 'bus-2')
+        self.assertAlmostEqual(branch['primary_current_ka'], branch['from_current_ka'])
+        self.assertAlmostEqual(branch['secondary_current_ka'], branch['to_current_ka'])
+        self.assertLess(branch['primary_current_ka'], branch['secondary_current_ka'])
+        self.assertNotEqual(branch['primary_current_ka'], branch['secondary_current_ka'])
 
 
 if __name__ == '__main__':

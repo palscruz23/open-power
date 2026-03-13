@@ -1753,7 +1753,8 @@ def calculate_short_circuit(payload: ShortCircuitInput):
         to_bus_id: str,
         current_from: float | None,
         current_to: float | None,
-        current_mid: float | None
+        current_mid: float | None,
+        branch_type: str = 'line'
     ) -> Dict[str, float | str | None]:
         candidates = [
             abs(current)
@@ -1765,6 +1766,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
         result = {
             'from_bus_id': from_bus_id,
             'to_bus_id': to_bus_id,
+            'branch_type': branch_type,
             'from_current_ka': round(float(current_from), 5) if current_from is not None else None,
             'to_current_ka': round(float(current_to), 5) if current_to is not None else None,
             'current_ka': round(float(current_mid), 5) if current_mid is not None else None,
@@ -1785,6 +1787,12 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             result['from_ikss_ka'] = result['from_current_ka']
             result['to_ikss_ka'] = result['to_current_ka']
             result['ikss_ka'] = result['current_ka']
+
+        if branch_type == 'transformer':
+            result['primary_bus_id'] = from_bus_id
+            result['secondary_bus_id'] = to_bus_id
+            result['primary_current_ka'] = result['from_current_ka']
+            result['secondary_current_ka'] = result['to_current_ka']
 
         return result
 
@@ -1821,7 +1829,8 @@ def calculate_short_circuit(payload: ShortCircuitInput):
                 index_to_bus_id.get(lv_bus_idx, ''),
                 current_from,
                 current_to,
-                current_mid
+                current_mid,
+                branch_type='transformer'
             )
 
     fault_bus_current = scale_current(read_float(bus_result, selected_current_cfg['bus_candidates']))

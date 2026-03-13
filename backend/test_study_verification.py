@@ -13,6 +13,7 @@ from backend.test_study_samples import (
     make_load_flow_input,
     make_protection_study_input,
     make_short_circuit_input,
+    make_transformer_short_circuit_input,
 )
 
 
@@ -45,6 +46,15 @@ class RepresentativeStudyVerificationTests(unittest.TestCase):
         self.assertGreater(result['fault_bus']['current_ka'], 0.0)
         self.assertEqual(result['branches']['line-1']['result_key'], 'ith_ka')
         self.assertIsNotNone(result['branches']['line-1']['ith_ka'])
+
+    def test_transformer_short_circuit_sample_reports_distinct_side_currents(self):
+        result = calculate_short_circuit(make_transformer_short_circuit_input())
+
+        transformer_branch = result['branches']['line-tx-1']
+        self.assertEqual(transformer_branch['branch_type'], 'transformer')
+        self.assertLess(transformer_branch['primary_current_ka'], transformer_branch['secondary_current_ka'])
+        self.assertEqual(transformer_branch['primary_bus_id'], 'bus-1')
+        self.assertEqual(transformer_branch['secondary_bus_id'], 'bus-2')
 
     def test_ansi_and_iec_short_circuit_sample_networks_report_different_duties(self):
         ansi_result = calculate_short_circuit(make_short_circuit_input())
