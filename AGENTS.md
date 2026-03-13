@@ -185,6 +185,7 @@ Typical checks:
 - Frontend: `npm run build` from `frontend/`
 - Backend: start/import the FastAPI app or run tests if present, using the repo-local `.venv` Python on Windows (`.venv\Scripts\python.exe`) because the system Python may not include `pandapower`
 - Representative backend study verification fixtures live in `backend/test_study_samples.py`; extend those shared sample-network builders before adding another copy of the same radial or protection test payload in a new verification file.
+- Arc-flash regression coverage should be split intentionally: keep focused request-model edge cases in `backend/test_arc_flash.py`, and mirror one successful sample plus one invalid-assumption case in `backend/test_study_verification.py` so the shared study suite exercises the maintained representative fixtures.
 
 If study behavior changes, verify both:
 - load-flow execution

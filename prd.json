@@ -276,7 +276,7 @@
         "Documented quality checks include the arc-flash workflow alongside the existing study types"
       ],
       "priority": 17,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Extend the existing representative-study verification strategy rather than inventing a separate testing approach for arc-flash."
     },
