@@ -196,7 +196,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 12,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Establish the UX entry point first so later arc-flash work can land without overloading the existing study panels."
     },

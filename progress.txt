@@ -3,6 +3,7 @@
 - Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - UI-only study tabs should keep draft inputs and readiness/run state in local React state rather than extending `buildNetworkModel()` or persisting extra study data into the shared graph.
+- Frontend-only placeholder studies should add their tab/route in `frontend/src/App.jsx`, keep draft inputs in `LoadFlowStudyPage.jsx`, and render prerequisites plus disabled outputs from `frontend/src/components/ControlPanel.jsx` until backend support exists.
 - Run backend verification with the repo-local Windows virtualenv (`.venv\Scripts\python.exe`); the system Python in this workspace may not have `pandapower` installed.
 - Representative backend study coverage should reuse the shared sample payload builders in `backend/test_study_samples.py` so load-flow, ANSI short-circuit, IEC 60909 short-circuit, and protection coordination stay aligned on the same maintained fixtures.
 - Shared frontend network serialization now lives in `frontend/src/utils/networkPayload.js`; add base graph fields in `buildNetworkModel()` and layer study-specific request options through the dedicated payload builders instead of copying mapping logic into each study flow.
@@ -191,4 +192,20 @@
 - Files changed in working tree after run:
   - none
 - Latest commit: 18ffd43 feat: [US-011] - [Add representative study verification coverage]
+---
+## 2026-03-12 23:18:21 +10:30 - US-012
+- Verified and completed the dedicated arc-flash workflow entry point already present in the frontend: top-level study tab, dedicated route, isolated control-panel inputs, and readiness-only run state that does not persist into the shared network graph.
+- Marked the story implemented after confirming arc-flash draft state stays local to `LoadFlowStudyPage.jsx` and persistence still flows through `sanitizeGraphForPersistence()` without arc-flash result/run fields.
+- Files changed: `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - The arc-flash workflow entry point is intentionally frontend-only for now: `frontend/src/App.jsx` owns the study tab/route, while `frontend/src/components/ControlPanel.jsx` renders prerequisite messaging and disabled placeholder outputs until backend support lands.
+  - Arc-flash draft inputs (`arcFlashMethod`, `arcFlashWorkingDistanceMm`, `arcFlashEquipmentClass`, `arcFlashReviewRequested`) are local React state in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep future unfinished-study fields there instead of extending persisted graph data or `frontend/src/utils/networkPayload.js`.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-12 23:31:12 +10:30 - US-012
+- Routed the arc-flash tab to its dedicated status renderer so readiness reviews stay in the arc-flash panel instead of falling back to the generic result output path.
+- Files changed: `frontend/src/components/ControlPanel.jsx`, `progress.txt`
+- **Learnings for future iterations:**
+  - Placeholder study tabs still need an explicit result renderer branch in `frontend/src/components/ControlPanel.jsx`; otherwise local review state can silently fall through to the generic `result`/`error` output used by load flow.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---
