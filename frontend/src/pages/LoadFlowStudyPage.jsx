@@ -22,6 +22,7 @@ import {
   UtilityNode
 } from '../components/SymbolNodes';
 import {
+  buildArcFlashPayload,
   buildLoadFlowPayload,
   buildNetworkModel,
   buildProtectionPayload,
@@ -238,8 +239,14 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const [shortCircuitCurrentType, setShortCircuitCurrentType] = useState('initial_symmetrical');
   const [shortCircuitFaultBusId, setShortCircuitFaultBusId] = useState('');
   const [arcFlashMethod, setArcFlashMethod] = useState('ieee_1584');
+  const [arcFlashStudyBusId, setArcFlashStudyBusId] = useState('');
+  const [arcFlashEquipmentLabel, setArcFlashEquipmentLabel] = useState('');
   const [arcFlashWorkingDistanceMm, setArcFlashWorkingDistanceMm] = useState('455');
   const [arcFlashEquipmentClass, setArcFlashEquipmentClass] = useState('switchboard');
+  const [arcFlashEnclosureType, setArcFlashEnclosureType] = useState('enclosed');
+  const [arcFlashClearingMode, setArcFlashClearingMode] = useState('fixed_time');
+  const [arcFlashClearingTimeS, setArcFlashClearingTimeS] = useState('0.08');
+  const [arcFlashClearingDeviceId, setArcFlashClearingDeviceId] = useState('');
   const [arcFlashReviewRequested, setArcFlashReviewRequested] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const nodeTypes = useMemo(
@@ -267,6 +274,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   useEffect(() => {
     if (busNodes.length === 0) {
       setShortCircuitFaultBusId('');
+      setArcFlashStudyBusId('');
       return;
     }
 
@@ -274,7 +282,12 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     if (!isSelectedBusValid) {
       setShortCircuitFaultBusId('');
     }
-  }, [busNodes, shortCircuitFaultBusId]);
+
+    const isArcFlashBusValid = busNodes.some((bus) => bus.id === arcFlashStudyBusId);
+    if (!isArcFlashBusValid) {
+      setArcFlashStudyBusId('');
+    }
+  }, [arcFlashStudyBusId, busNodes, shortCircuitFaultBusId]);
 
   useEffect(() => {
     setNodes((currentNodes) => {
@@ -583,6 +596,23 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     [nodes, edges, resolveConnectedBus]
   );
   const sourceReachableBusIds = useMemo(() => getSourceReachableBusIds(nodes, edges), [nodes, edges]);
+  const arcFlashDeviceOptions = useMemo(
+    () =>
+      nodes
+        .filter((node) => PROTECTION_ELIGIBLE_NODE_TYPES.has(node.type) && Boolean(node.data?.protection?.enabled))
+        .filter((node) => {
+          const connectedBusId = resolveConnectedBus(node.id);
+          return connectedBusId && sourceReachableBusIds.has(connectedBusId);
+        })
+        .map((node) => ({
+          id: node.id,
+          label:
+            typeof node.data?.protection?.name === 'string' && node.data.protection.name.trim().length > 0
+              ? node.data.protection.name.trim()
+              : `${node.data?.label || node.id} Relay`
+        })),
+    [nodes, resolveConnectedBus, sourceReachableBusIds]
+  );
 
   const validateShortCircuitRun = useCallback(() => {
     if (networkModel.buses.length === 0) {
@@ -640,15 +670,58 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
     return '';
   }, [networkModel.generators, networkModel.loads, networkModel.transformers, nodes]);
 
+  const validateArcFlashRun = useCallback(() => {
+    if (networkModel.buses.length === 0) {
+      return 'Add at least one bus before running arc-flash input validation.';
+    }
+    if (!arcFlashStudyBusId) {
+      return 'Select a study bus before reviewing arc-flash inputs.';
+    }
+    if (!networkModel.buses.some((bus) => bus.id === arcFlashStudyBusId)) {
+      return `Selected arc-flash bus "${arcFlashStudyBusId}" is no longer available in the current network.`;
+    }
+    if (!sourceReachableBusIds.has(arcFlashStudyBusId)) {
+      return `Selected arc-flash bus "${arcFlashStudyBusId}" is not electrically connected to any generator or utility source.`;
+    }
+    if (!arcFlashEquipmentLabel.trim()) {
+      return 'Enter an equipment label before reviewing arc-flash inputs.';
+    }
+
+    const workingDistanceMm = Number(arcFlashWorkingDistanceMm);
+    if (!Number.isFinite(workingDistanceMm) || workingDistanceMm <= 0) {
+      return 'Working distance must be a positive number of millimetres.';
+    }
+
+    if (arcFlashClearingMode === 'fixed_time') {
+      const clearingTimeS = Number(arcFlashClearingTimeS);
+      if (!Number.isFinite(clearingTimeS) || clearingTimeS <= 0) {
+        return 'Fixed clearing time must be a positive number of seconds.';
+      }
+      return '';
+    }
+
+    if (!arcFlashClearingDeviceId) {
+      return 'Select a protection device when using device-based arc-flash clearing assumptions.';
+    }
+    if (!arcFlashDeviceOptions.some((device) => device.id === arcFlashClearingDeviceId)) {
+      return `Arc-flash clearing device "${arcFlashClearingDeviceId}" is no longer available in the active network.`;
+    }
+
+    return '';
+  }, [
+    arcFlashClearingDeviceId,
+    arcFlashClearingMode,
+    arcFlashClearingTimeS,
+    arcFlashDeviceOptions,
+    arcFlashEquipmentLabel,
+    arcFlashStudyBusId,
+    arcFlashWorkingDistanceMm,
+    networkModel.buses,
+    sourceReachableBusIds
+  ]);
+
   const callStudy = useCallback(
     async (studyType) => {
-      if (studyType === 'arcflash') {
-        setError('');
-        setResult(null);
-        setArcFlashReviewRequested(true);
-        return;
-      }
-
       try {
         setIsStudyRunning(true);
         setError('');
@@ -660,7 +733,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             ? '/api/calculate/load-flow'
             : studyType === 'shortcircuit'
               ? '/api/calculate/short-circuit'
-              : '/api/calculate/protection-coordination';
+              : studyType === 'protection'
+                ? '/api/calculate/protection-coordination'
+                : '/api/calculate/arc-flash';
 
         if (studyType === 'shortcircuit') {
           clearLoadFlowAnnotations();
@@ -728,6 +803,14 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             return;
           }
         }
+        if (studyType === 'arcflash') {
+          const validationError = validateArcFlashRun();
+          if (validationError) {
+            setError(validationError);
+            return;
+          }
+          setArcFlashReviewRequested(true);
+        }
 
         payload =
           studyType === 'loadflow'
@@ -739,7 +822,21 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                   faultType: shortCircuitFaultType,
                   currentType: shortCircuitCurrentType
                 })
-              : buildProtectionPayload(networkModel);
+              : studyType === 'protection'
+                ? buildProtectionPayload(networkModel)
+                : buildArcFlashPayload(networkModel, {
+                    method: arcFlashMethod,
+                    studyBusId: arcFlashStudyBusId,
+                    equipmentLabel: arcFlashEquipmentLabel.trim(),
+                    equipmentClass: arcFlashEquipmentClass,
+                    enclosureType: arcFlashEnclosureType,
+                    workingDistanceMm: Number(arcFlashWorkingDistanceMm),
+                    clearingMode: arcFlashClearingMode,
+                    clearingDurationS:
+                      arcFlashClearingMode === 'fixed_time' ? Number(arcFlashClearingTimeS) : null,
+                    clearingDeviceId:
+                      arcFlashClearingMode === 'protective_device' ? arcFlashClearingDeviceId : null
+                  });
 
         const response = await axios.post(`${API_BASE}${endpoint}`, payload);
         if (studyType === 'shortcircuit') {
@@ -1192,6 +1289,15 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       }
     },
     [
+      arcFlashClearingDeviceId,
+      arcFlashClearingMode,
+      arcFlashClearingTimeS,
+      arcFlashEnclosureType,
+      arcFlashEquipmentClass,
+      arcFlashEquipmentLabel,
+      arcFlashMethod,
+      arcFlashStudyBusId,
+      arcFlashWorkingDistanceMm,
       networkModel,
       shortCircuitFaultBusId,
       shortCircuitStandard,
@@ -1199,6 +1305,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
       shortCircuitCurrentType,
       clearLoadFlowAnnotations,
       clearShortCircuitAnnotations,
+      validateArcFlashRun,
       validateProtectionRun,
       validateShortCircuitRun,
       edges,
@@ -1683,10 +1790,23 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         onShortCircuitFaultBusIdChange={setShortCircuitFaultBusId}
         arcFlashMethod={arcFlashMethod}
         onArcFlashMethodChange={setArcFlashMethod}
+        arcFlashStudyBusId={arcFlashStudyBusId}
+        onArcFlashStudyBusIdChange={setArcFlashStudyBusId}
+        arcFlashEquipmentLabel={arcFlashEquipmentLabel}
+        onArcFlashEquipmentLabelChange={setArcFlashEquipmentLabel}
         arcFlashWorkingDistanceMm={arcFlashWorkingDistanceMm}
         onArcFlashWorkingDistanceMmChange={setArcFlashWorkingDistanceMm}
         arcFlashEquipmentClass={arcFlashEquipmentClass}
         onArcFlashEquipmentClassChange={setArcFlashEquipmentClass}
+        arcFlashEnclosureType={arcFlashEnclosureType}
+        onArcFlashEnclosureTypeChange={setArcFlashEnclosureType}
+        arcFlashClearingMode={arcFlashClearingMode}
+        onArcFlashClearingModeChange={setArcFlashClearingMode}
+        arcFlashClearingTimeS={arcFlashClearingTimeS}
+        onArcFlashClearingTimeSChange={setArcFlashClearingTimeS}
+        arcFlashClearingDeviceId={arcFlashClearingDeviceId}
+        onArcFlashClearingDeviceIdChange={setArcFlashClearingDeviceId}
+        arcFlashDeviceOptions={arcFlashDeviceOptions}
         arcFlashReviewRequested={arcFlashReviewRequested}
         protectionDeviceCount={protectionDeviceCount}
         isStudyRunning={isStudyRunning}

@@ -187,3 +187,20 @@ export function buildProtectionPayload(networkModel, options = {}) {
     coordination_margin_s: options.coordinationMarginS
   };
 }
+
+export function buildArcFlashPayload(networkModel, options) {
+  return {
+    ...buildLoadFlowPayload(networkModel),
+    method: options.method,
+    study_bus_id: options.studyBusId,
+    equipment_label: options.equipmentLabel,
+    equipment_class: options.equipmentClass,
+    enclosure_type: options.enclosureType,
+    working_distance_mm: options.workingDistanceMm,
+    fault_clearing: {
+      mode: options.clearingMode,
+      duration_s: options.clearingDurationS,
+      device_id: options.clearingDeviceId
+    }
+  };
+}

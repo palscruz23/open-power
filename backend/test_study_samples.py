@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from backend.main import LoadFlowInput, ProtectionStudyInput, ShortCircuitInput
+from backend.main import ArcFlashInput, LoadFlowInput, ProtectionStudyInput, ShortCircuitInput
 
 
 def _deep_update(base, overrides):
@@ -125,3 +125,24 @@ def make_protection_payload(**overrides):
 
 def make_protection_study_input(**overrides):
     return make_protection_payload(**overrides)
+
+
+def make_arc_flash_payload(**overrides):
+    base = {
+        'method': 'ieee_1584',
+        'study_bus_id': 'bus-2',
+        'equipment_label': 'Main Switchboard Section A',
+        'equipment_class': 'switchboard',
+        'enclosure_type': 'enclosed',
+        'working_distance_mm': 455.0,
+        'fault_clearing': {
+            'mode': 'fixed_time',
+            'duration_s': 0.08,
+            'device_id': None,
+        },
+    }
+    return ArcFlashInput(**make_radial_network_payload(**_deep_update(base, overrides)))
+
+
+def make_arc_flash_input(**overrides):
+    return make_arc_flash_payload(**overrides)
