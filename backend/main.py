@@ -670,6 +670,227 @@ PROTECTION_CURVE_LIBRARY = {
 }
 
 
+ARC_FLASH_EQUIPMENT_LIBRARY = {
+    'switchgear': {
+        'display_name': 'Switchgear',
+        'gap_mm': 32.0,
+        'arc_current_ratio': 0.88,
+        'arc_efficiency': 0.42,
+        'enclosed_focus_factor': 2.25,
+        'open_air_focus_factor': 1.35,
+        'distance_exponent': 1.55,
+    },
+    'switchboard': {
+        'display_name': 'Switchboard',
+        'gap_mm': 25.0,
+        'arc_current_ratio': 0.78,
+        'arc_efficiency': 0.38,
+        'enclosed_focus_factor': 2.45,
+        'open_air_focus_factor': 1.4,
+        'distance_exponent': 1.6,
+    },
+    'mcc': {
+        'display_name': 'Motor Control Center',
+        'gap_mm': 13.0,
+        'arc_current_ratio': 0.68,
+        'arc_efficiency': 0.34,
+        'enclosed_focus_factor': 2.8,
+        'open_air_focus_factor': None,
+        'distance_exponent': 1.65,
+    },
+}
+
+
+ARC_FLASH_INCIDENT_ENERGY_REFERENCE_CAL_CM2 = 1.2
+
+
+def get_arc_flash_equipment_config(payload: ArcFlashInput) -> Dict[str, float | str | None]:
+    equipment_config = ARC_FLASH_EQUIPMENT_LIBRARY.get(payload.equipment_class)
+    if equipment_config is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Arc-flash equipment class "{payload.equipment_class}" is not supported in this release.'
+        )
+
+    if payload.enclosure_type == 'open_air' and equipment_config['open_air_focus_factor'] is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Arc-flash studies for {equipment_config["display_name"]} equipment currently support '
+                'enclosed equipment only.'
+            )
+        )
+
+    return equipment_config
+
+
+def validate_arc_flash_method_scope(payload: ArcFlashInput, study_bus: Bus) -> None:
+    voltage_kv = float(study_bus.vn_kv)
+    if voltage_kv < 0.208 or voltage_kv > 15.0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Arc-flash calculations for bus "{study_bus.id}" require nominal voltage between 0.208 kV '
+                f'and 15 kV in this release. The selected bus is {round(voltage_kv, 5)} kV.'
+            )
+        )
+
+
+def build_arc_flash_protection_payload(payload: ArcFlashInput) -> ProtectionStudyInput:
+    return ProtectionStudyInput(**payload.model_dump())
+
+
+def calculate_arc_flash_fault_current_a(payload: ArcFlashInput, bus_id: str) -> float:
+    protection_payload = build_arc_flash_protection_payload(payload)
+    return calculate_bus_fault_current_a(protection_payload, bus_id)
+
+
+def estimate_arc_flash_arcing_current_a(
+    bolted_fault_current_a: float,
+    voltage_kv: float,
+    equipment_config: Dict[str, float | str | None],
+    enclosure_type: str
+) -> float:
+    voltage_factor = max(0.82, min(1.18, 0.92 + 0.09 * math.log10((voltage_kv * 1000.0) / 480.0)))
+    enclosure_factor = 1.05 if enclosure_type == 'enclosed' else 0.96
+    gap_factor = max(0.82, min(1.08, 1.0 - ((float(equipment_config['gap_mm']) - 25.0) / 180.0)))
+    arcing_current_a = bolted_fault_current_a * float(equipment_config['arc_current_ratio']) * voltage_factor
+    arcing_current_a *= enclosure_factor * gap_factor
+    return max(arcing_current_a, bolted_fault_current_a * 0.25)
+
+
+def calculate_arc_flash_device_operating_time_s(
+    device: Dict[str, object],
+    current_a: float
+) -> float:
+    pickup_current_a = float(device['pickup_current_a'])
+    instantaneous_pickup_a = device.get('instantaneous_pickup_a')
+    instantaneous_pickup_a = float(instantaneous_pickup_a) if instantaneous_pickup_a is not None else None
+    clearing_time_adder_s = float(device['clearing_time_adder_s'])
+
+    if instantaneous_pickup_a is not None and current_a >= instantaneous_pickup_a:
+        base_time_s = 0.03 if device['device_type'] == 'fuse' else 0.05
+        return round(base_time_s + clearing_time_adder_s, 5)
+
+    multiple = current_a / pickup_current_a if pickup_current_a > 0 else 0.0
+    if multiple <= 1.0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Protection device "{device["name"]}" does not operate for the estimated arc current of '
+                f'{round(current_a, 3)} A because its pickup is {round(pickup_current_a, 3)} A.'
+            )
+        )
+
+    operating_time_s = evaluate_protection_operating_time(
+        str(device['curve_family']),
+        multiple,
+        float(device['time_dial'])
+    )
+    return round(operating_time_s + clearing_time_adder_s, 5)
+
+
+def resolve_arc_flash_clearing_summary(
+    payload: ArcFlashInput,
+    arcing_current_a: float
+) -> Dict[str, object]:
+    clearing = payload.fault_clearing
+    if clearing.mode == 'fixed_time':
+        duration_s = round(float(clearing.duration_s), 5)
+        return {
+            'mode': clearing.mode,
+            'duration_s': duration_s,
+            'device_id': None,
+            'device_name': None,
+            'assumption_label': f'Fixed clearing time of {duration_s} s',
+        }
+
+    protection_payload = build_arc_flash_protection_payload(payload)
+    validated_devices = validate_protection_study(protection_payload)
+    selected_device = next(
+        (device for device in validated_devices if str(device['asset_id']) == str(clearing.device_id)),
+        None
+    )
+    if selected_device is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'Arc-flash clearing device "{clearing.device_id}" is not valid for protection-based clearing '
+                'time assumptions in this release.'
+            )
+        )
+
+    reduced_arcing_current_a = arcing_current_a * 0.85
+    operating_time_s = calculate_arc_flash_device_operating_time_s(selected_device, arcing_current_a)
+    if reduced_arcing_current_a > float(selected_device['pickup_current_a']):
+        operating_time_s = max(
+            operating_time_s,
+            calculate_arc_flash_device_operating_time_s(selected_device, reduced_arcing_current_a)
+        )
+
+    duration_s = round(float(operating_time_s), 5)
+    return {
+        'mode': clearing.mode,
+        'duration_s': duration_s,
+        'device_id': str(selected_device['asset_id']),
+        'device_name': str(selected_device['name']),
+        'device_type': str(selected_device['device_type']),
+        'curve_family': str(selected_device['curve_family']),
+        'pickup_current_a': round(float(selected_device['pickup_current_a']), 5),
+        'instantaneous_pickup_a': (
+            round(float(selected_device['instantaneous_pickup_a']), 5)
+            if selected_device['instantaneous_pickup_a'] is not None
+            else None
+        ),
+        'assumption_label': (
+            f'Protection device {selected_device["name"]} operating on estimated arc current'
+        ),
+    }
+
+
+def calculate_arc_flash_incident_energy(
+    study_bus: Bus,
+    working_distance_mm: float,
+    equipment_config: Dict[str, float | str | None],
+    enclosure_type: str,
+    arcing_current_a: float,
+    clearing_time_s: float
+) -> Dict[str, float]:
+    voltage_v = float(study_bus.vn_kv) * 1000.0
+    working_distance_mm = float(working_distance_mm)
+    working_distance_m = working_distance_mm / 1000.0
+    distance_exponent = float(equipment_config['distance_exponent'])
+    normalized_distance_m = 0.455
+    raw_arc_energy_j = (
+        math.sqrt(3.0)
+        * voltage_v
+        * arcing_current_a
+        * clearing_time_s
+        * float(equipment_config['arc_efficiency'])
+    )
+    focus_factor = (
+        float(equipment_config['enclosed_focus_factor'])
+        if enclosure_type == 'enclosed'
+        else float(equipment_config['open_air_focus_factor'])
+    )
+    normalized_incident_energy_cal_cm2 = (
+        raw_arc_energy_j
+        * focus_factor
+        / (4.0 * math.pi * ((normalized_distance_m * 100.0) ** 2.0))
+        / 4.184
+    )
+    incident_energy_cal_cm2 = normalized_incident_energy_cal_cm2 * (
+        (normalized_distance_m / working_distance_m) ** distance_exponent
+    )
+    return {
+        'normalized_incident_energy_cal_cm2': round(normalized_incident_energy_cal_cm2, 5),
+        'incident_energy_cal_cm2': round(incident_energy_cal_cm2, 5),
+        'distance_exponent': round(distance_exponent, 5),
+        'focus_factor': round(focus_factor, 5),
+        'raw_arc_energy_kj': round(raw_arc_energy_j / 1000.0, 5),
+    }
+
+
 def evaluate_protection_operating_time(curve_family: str, multiple: float, time_dial: float) -> float:
     if multiple <= 1.0:
         raise ValueError('Protection curve multiple must be greater than 1.0.')
@@ -1588,22 +1809,46 @@ def calculate_arc_flash(payload: ArcFlashInput):
     context = validate_arc_flash_study(payload)
     study_bus = context['study_bus']
     equipment_label = context['equipment_label']
-    clearing = payload.fault_clearing
-
-    clearing_summary = {
-        'mode': clearing.mode,
-        'duration_s': round(float(clearing.duration_s), 5) if clearing.duration_s is not None else None,
-        'device_id': clearing.device_id,
-        'assumption_label': (
-            f'Fixed clearing time of {round(float(clearing.duration_s), 5)} s'
-            if clearing.mode == 'fixed_time'
-            else f'Protection device assumption from {clearing.device_id}'
-        )
-    }
+    validate_arc_flash_method_scope(payload, study_bus)
+    equipment_config = get_arc_flash_equipment_config(payload)
+    bolted_fault_current_a = calculate_arc_flash_fault_current_a(payload, payload.study_bus_id)
+    arcing_current_a = estimate_arc_flash_arcing_current_a(
+        bolted_fault_current_a=bolted_fault_current_a,
+        voltage_kv=float(study_bus.vn_kv),
+        equipment_config=equipment_config,
+        enclosure_type=payload.enclosure_type
+    )
+    clearing_summary = resolve_arc_flash_clearing_summary(payload, arcing_current_a)
+    clearing_time_s = float(clearing_summary['duration_s'])
+    energy_summary = calculate_arc_flash_incident_energy(
+        study_bus=study_bus,
+        working_distance_mm=float(payload.working_distance_mm),
+        equipment_config=equipment_config,
+        enclosure_type=payload.enclosure_type,
+        arcing_current_a=arcing_current_a,
+        clearing_time_s=clearing_time_s
+    )
+    incident_energy_cal_cm2 = float(energy_summary['incident_energy_cal_cm2'])
+    distance_exponent = float(energy_summary['distance_exponent'])
+    arc_flash_boundary_mm = max(
+        float(payload.working_distance_mm),
+        float(payload.working_distance_mm)
+        * ((incident_energy_cal_cm2 / ARC_FLASH_INCIDENT_ENERGY_REFERENCE_CAL_CM2) ** (1.0 / distance_exponent))
+    )
 
     return {
-        'status': 'ready',
-        'message': 'Arc-flash study inputs validated. Calculation outputs remain unavailable in this release.',
+        'status': 'completed',
+        'message': (
+            f'Calculated arc-flash incident energy for {equipment_label} at bus "{payload.study_bus_id}" '
+            'using the configured IEEE 1584 study assumptions.'
+        ),
+        'summary': {
+            'incident_energy_cal_cm2': round(incident_energy_cal_cm2, 5),
+            'arc_flash_boundary_mm': round(float(arc_flash_boundary_mm), 5),
+            'available_fault_current_ka': round(bolted_fault_current_a / 1000.0, 5),
+            'arcing_current_ka': round(arcing_current_a / 1000.0, 5),
+            'clearing_time_s': round(clearing_time_s, 5),
+        },
         'assumptions': {
             'method': payload.method,
             'study_bus_id': payload.study_bus_id,
@@ -1615,8 +1860,19 @@ def calculate_arc_flash(payload: ArcFlashInput):
             'working_distance_mm': round(float(payload.working_distance_mm), 5),
             'fault_clearing': clearing_summary
         },
+        'calculation': {
+            'available_bolted_fault_current_ka': round(bolted_fault_current_a / 1000.0, 5),
+            'estimated_arcing_current_ka': round(arcing_current_a / 1000.0, 5),
+            'electrode_gap_mm': round(float(equipment_config['gap_mm']), 5),
+            'distance_exponent': energy_summary['distance_exponent'],
+            'focus_factor': energy_summary['focus_factor'],
+            'normalized_incident_energy_cal_cm2': energy_summary['normalized_incident_energy_cal_cm2'],
+            'raw_arc_energy_kj': energy_summary['raw_arc_energy_kj'],
+        },
         'limitations': [
-            'Incident energy and arc-flash boundary calculations are not implemented yet.',
-            'The current arc-flash workflow validates study inputs and working assumptions only.'
+            'This release uses a simplified IEEE 1584-inspired empirical model derived from the network short-circuit current, equipment class, enclosure type, and working distance.',
+            'Only three-phase AC studies between 0.208 kV and 15 kV are supported; electrode configuration, conductor geometry, and enclosure dimensions are not user-configurable yet.',
+            'The arc-flash boundary is reported at 1.2 cal/cm^2 and assumes the same distance exponent applies beyond the entered working distance.',
+            'Protection-device clearing time assumptions use the configured TCC settings and estimated arcing current at the selected study bus; detailed relay logic, zone selectivity, and reduced-voltage arc tracking are not modeled.'
         ]
     }

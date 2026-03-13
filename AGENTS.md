@@ -147,6 +147,7 @@ Protection coordination notes:
 - Transformer-attached protection devices currently infer the protected side by comparing the configured pickup current against the transformer's rated HV and LV currents; keep that heuristic in mind if you extend transformer protection inputs.
 - Shared backend sample networks for regression coverage live in `backend/test_study_samples.py`; extend those payload builders first when adding representative study verification so load-flow, short-circuit, and protection suites stay aligned on the same maintained fixtures.
 - Device-based arc-flash clearing assumptions should reference the shared `protection_devices` asset ids from the network payload rather than introducing a second protection-device registry for arc-flash studies.
+- Arc-flash backend calculations should reuse the existing protection/short-circuit helpers for available fault current and device operating time, then return user-facing outputs through `summary`, `assumptions`, `calculation`, and `limitations` blocks instead of inventing a separate result contract.
 
 ## 7. Workflow Files
 

@@ -16,6 +16,7 @@
 - Protection coordination charting lives in `frontend/src/components/ControlPanel.jsx` as a native SVG view driven directly by the backend `curves` array; keep loading/error/content state there and avoid adding a second frontend-only curve model.
 - Protection coordination feedback should extend the backend `analysis` block (`warning_count`, `warnings`, `scope_notes`) so warnings and out-of-scope notes stay separate from chart data and device summaries.
 - Advanced-study validation should be duplicated intentionally: `LoadFlowStudyPage.jsx` should preflight disconnected protection assets and unsupported study modes for fast UI feedback, while `backend/main.py` must enforce the same rules with explicit HTTP 400 messages.
+- Arc-flash backend results should reuse the existing short-circuit and protection helpers for available fault current and device clearing time, then expose study outputs through `summary`, `assumptions`, `calculation`, and `limitations` blocks so the frontend can extend rendering without a second payload shape.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -209,4 +210,13 @@
 - **Learnings for future iterations:**
   - Placeholder study tabs still need an explicit result renderer branch in `frontend/src/components/ControlPanel.jsx`; otherwise local review state can silently fall through to the generic `result`/`error` output used by load flow.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-13 20:54:03 +10:30 - US-014
+- Implemented backend arc-flash incident-energy and boundary calculations with explicit IEEE 1584-inspired assumptions, reusable equipment-class coefficients, and device-based clearing-time support derived from the shared network plus protection settings.
+- Added backend validation for unsupported arc-flash scope cases and extended representative verification with successful arc-flash study coverage and an unsupported equipment failure.
+- Files changed: `backend/main.py`, `backend/test_arc_flash.py`, `backend/test_study_verification.py`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Arc-flash backend calculations should stay aligned with the existing protection helper stack: reuse the shared short-circuit current path for the study bus and the validated protection-device timing logic for protective-device clearing assumptions.
+  - Arc-flash result payloads now have stable `summary`, `assumptions`, `calculation`, and `limitations` blocks; extend those sections before adding another top-level arc-flash response shape.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed; direct arc-flash smoke execution via `.venv\\Scripts\\python.exe` passed.
 ---

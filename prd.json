@@ -228,7 +228,7 @@
         "Backend verification passes for at least one representative arc-flash scenario"
       ],
       "priority": 14,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Build the calculation engine around explicit assumptions and expose limitations clearly where the electrical model or standard support is incomplete."
     },

@@ -1,11 +1,13 @@
 import unittest
 
 from backend.main import (
+    calculate_arc_flash,
     calculate_load_flow,
     calculate_protection_coordination,
     calculate_short_circuit,
 )
 from backend.test_study_samples import (
+    make_arc_flash_input,
     make_load_flow_input,
     make_protection_study_input,
     make_short_circuit_input,
@@ -51,6 +53,15 @@ class RepresentativeStudyVerificationTests(unittest.TestCase):
         self.assertGreaterEqual(len(result['curves']), 2)
         self.assertTrue(all(curve['points'] for curve in result['curves']))
         self.assertIn('analysis', result)
+
+    def test_arc_flash_sample_network(self):
+        result = calculate_arc_flash(make_arc_flash_input())
+
+        self.assertEqual(result['status'], 'completed')
+        self.assertGreater(result['summary']['incident_energy_cal_cm2'], 0.0)
+        self.assertGreater(result['summary']['arc_flash_boundary_mm'], 0.0)
+        self.assertEqual(result['assumptions']['study_bus_id'], 'bus-2')
+        self.assertTrue(result['limitations'])
 
 
 if __name__ == '__main__':
