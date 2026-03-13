@@ -145,6 +145,9 @@ function sanitizeEdgeForPersistence(edge) {
     label: undefined,
     labelStyle: undefined,
     labelShowBg: undefined,
+    labelBgStyle: undefined,
+    labelBgPadding: undefined,
+    labelBgBorderRadius: undefined,
     markerStart: undefined,
     markerEnd: undefined
   };
@@ -906,6 +909,9 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           const nodeLabelById = new Map(
             nodes.map((node) => [node.id, String(node.data?.label || node.id)])
           );
+          const nodePositionById = new Map(
+            nodes.map((node) => [node.id, { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }])
+          );
 
           const adjacency = new Map();
           Object.values(branchResults).forEach((branch) => {
@@ -987,6 +993,37 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             }
             return null;
           };
+
+          const edgeAngleByBusId = new Map();
+          edges.forEach((edge) => {
+            const sourcePos = nodePositionById.get(edge.source);
+            const targetPos = nodePositionById.get(edge.target);
+            if (!sourcePos || !targetPos) return;
+
+            const connectedBusIds = [edge.source, edge.target].filter((nodeId) => nodeTypeById.get(nodeId) === 'bus');
+            connectedBusIds.forEach((busId) => {
+              const otherNodeId = edge.source === busId ? edge.target : edge.source;
+              const otherPos = nodePositionById.get(otherNodeId);
+              const busPos = nodePositionById.get(busId);
+              if (!otherPos || !busPos) return;
+
+              const angle = Math.atan2(otherPos.y - busPos.y, otherPos.x - busPos.x);
+              if (!edgeAngleByBusId.has(busId)) edgeAngleByBusId.set(busId, []);
+              edgeAngleByBusId.get(busId).push({ edgeId: edge.id, angle });
+            });
+          });
+
+          const orderedEdgeIdsByBusId = new Map(
+            [...edgeAngleByBusId.entries()].map(([busId, entries]) => [
+              busId,
+              entries
+                .sort((left, right) => {
+                  if (left.angle !== right.angle) return left.angle - right.angle;
+                  return left.edgeId.localeCompare(right.edgeId);
+                })
+                .map((entry) => entry.edgeId)
+            ])
+          );
 
           setNodes((currentNodes) =>
             currentNodes.map((node) => {
@@ -1104,22 +1141,43 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
               const shouldShowContributionLabel =
                 effectiveContributionKa != null &&
                 (contributesToFaultBus ? edgeTouchesFaultSide : isSourceEdgeContribution);
-              const fromPos = hasDirection ? nodes.find((node) => node.id === effectiveDirection.fromId)?.position : null;
-              const toPos = hasDirection ? nodes.find((node) => node.id === effectiveDirection.toId)?.position : null;
+              const labelAnchorBusId = contributesToFaultBus
+                ? effectiveDirection?.toId
+                : hasMotorContribution
+                  ? motorContribution?.toId
+                  : sourceNodeContribution?.busId;
+              const labelRemoteNodeId =
+                labelAnchorBusId && effectiveDirection
+                  ? effectiveDirection.fromId === labelAnchorBusId
+                    ? effectiveDirection.toId
+                    : effectiveDirection.fromId
+                  : null;
+              const anchorPos = labelAnchorBusId ? nodePositionById.get(labelAnchorBusId) : null;
+              const remotePos = labelRemoteNodeId ? nodePositionById.get(labelRemoteNodeId) : null;
+              const fallbackFromPos = hasDirection ? nodePositionById.get(effectiveDirection.fromId) : null;
+              const fallbackToPos = hasDirection ? nodePositionById.get(effectiveDirection.toId) : null;
+              const fromPos = anchorPos || fallbackFromPos || { x: 0, y: 0 };
+              const toPos = remotePos || fallbackToPos || { x: 0, y: 0 };
               const dx = (toPos?.x || 0) - (fromPos?.x || 0);
               const dy = (toPos?.y || 0) - (fromPos?.y || 0);
               const vectorMagnitude = Math.hypot(dx, dy);
-              const labelOffsetDistance = hasBranchContribution
-                ? 15
+              const unitX = vectorMagnitude > 0 ? dx / vectorMagnitude : 0;
+              const unitY = vectorMagnitude > 0 ? dy / vectorMagnitude : 0;
+              const normalX = vectorMagnitude > 0 ? -unitY : 0;
+              const normalY = vectorMagnitude > 0 ? unitX : 0;
+              const labelLaneOrder = labelAnchorBusId ? orderedEdgeIdsByBusId.get(labelAnchorBusId) || [] : [];
+              const labelLaneIndex = labelLaneOrder.indexOf(edge.id);
+              const laneCenter = labelLaneOrder.length > 0 ? (labelLaneOrder.length - 1) / 2 : 0;
+              const laneOffset = labelLaneIndex >= 0 ? (labelLaneIndex - laneCenter) * 18 : 0;
+              const labelTravelDistance = hasBranchContribution
+                ? 32
                 : hasMotorContribution
-                  ? 50
+                  ? 54
                   : hasSourceContribution
-                    ? 42
-                  : 28;
-              const labelOffsetX =
-                vectorMagnitude > 0 ? (dx / vectorMagnitude) * labelOffsetDistance : 0;
-              const labelOffsetY =
-                vectorMagnitude > 0 ? (dy / vectorMagnitude) * labelOffsetDistance : 0;
+                    ? 46
+                    : 30;
+              const labelOffsetX = unitX * labelTravelDistance + normalX * laneOffset;
+              const labelOffsetY = unitY * labelTravelDistance + normalY * laneOffset;
               const arrowGlyph =
                 Math.abs(dy) >= Math.abs(dx)
                   ? dy >= 0
@@ -1144,7 +1202,12 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                         transform: `translate(${labelOffsetX}px, ${labelOffsetY}px)`
                       }
                     : undefined,
-                labelShowBg: false,
+                labelShowBg: shouldShowContributionLabel,
+                labelBgStyle: shouldShowContributionLabel
+                  ? { fill: 'rgba(255, 250, 250, 0.96)', stroke: '#f1d2cf', strokeWidth: 1 }
+                  : undefined,
+                labelBgPadding: shouldShowContributionLabel ? [4, 7] : undefined,
+                labelBgBorderRadius: shouldShowContributionLabel ? 999 : undefined,
                 style:
                   shouldShowContributionLabel
                     ? { stroke: '#8a8f98', strokeWidth: 2.4 }
