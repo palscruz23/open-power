@@ -1336,12 +1336,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                 arcFlashResult.summary?.working_distance_mm ??
                 arcFlashWorkingDistanceMm
             ) || null;
-          const hazardLabel =
-            arcFlashResult.hazard_category ||
-            arcFlashResult.summary?.hazard_category ||
-            arcFlashResult.ppe_category ||
-            arcFlashResult.summary?.ppe_category ||
-            null;
+          const guidance = arcFlashResult.guidance || {};
+          const hazardLabel = guidance.summary_label || null;
           const arcFlashLabel =
             arcFlashResult.summary?.label ||
             (assumptions.method === 'ieee_1584' ? 'IEEE 1584 Arc Flash' : 'Arc Flash');

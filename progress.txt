@@ -18,6 +18,7 @@
 - Protection coordination feedback should extend the backend `analysis` block (`warning_count`, `warnings`, `scope_notes`) so warnings and out-of-scope notes stay separate from chart data and device summaries.
 - Advanced-study validation should be duplicated intentionally: `LoadFlowStudyPage.jsx` should preflight disconnected protection assets and unsupported study modes for fast UI feedback, while `backend/main.py` must enforce the same rules with explicit HTTP 400 messages.
 - Arc-flash backend results should reuse the existing short-circuit and protection helpers for available fault current and device clearing time, then expose study outputs through `summary`, `assumptions`, `calculation`, and `limitations` blocks so the frontend can extend rendering without a second payload shape.
+- Arc-flash safety review labels should be emitted from a dedicated backend `guidance` block; keep frontend PPE/severity rendering and transient canvas labels tied to that block instead of inferring guidance from raw numeric summary fields.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.
@@ -220,4 +221,13 @@
   - Arc-flash backend calculations should stay aligned with the existing protection helper stack: reuse the shared short-circuit current path for the study bus and the validated protection-device timing logic for protective-device clearing assumptions.
   - Arc-flash result payloads now have stable `summary`, `assumptions`, `calculation`, and `limitations` blocks; extend those sections before adding another top-level arc-flash response shape.
   - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed; direct arc-flash smoke execution via `.venv\\Scripts\\python.exe` passed.
+---
+## 2026-03-13 23:02:39 +10:30 - US-016
+- Added backend-derived arc-flash guidance with severity bands, conditional PPE categories, and explicit confidence/caution messaging so unsupported labels are withheld instead of inferred in the UI.
+- Updated the arc-flash results panel and canvas annotation mapping to read safety-review labels from the backend guidance block and show unsupported labels, review notes, and assumptions separately from numeric outputs.
+- Files changed: `backend/main.py`, `backend/test_arc_flash.py`, `backend/test_study_verification.py`, `frontend/src/components/ControlPanel.jsx`, `frontend/src/pages/LoadFlowStudyPage.jsx`, `frontend/src/styles.css`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Arc-flash review guidance should remain backend-authored; the frontend should render `result.guidance` directly so PPE availability, severity labels, and confidence notes stay traceable to the validated study assumptions.
+  - Open-air and device-estimated clearing cases can still produce incident energy, but derived PPE labels should be withheld or downgraded through guidance feedback rather than silently shown from numeric thresholds alone.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_arc_flash backend.test_study_verification` passed; `cmd /c npm run build` from `frontend/` still failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config, so only backend verification was fully executable here.
 ---

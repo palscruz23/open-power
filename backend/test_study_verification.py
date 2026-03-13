@@ -61,6 +61,8 @@ class RepresentativeStudyVerificationTests(unittest.TestCase):
         self.assertGreater(result['summary']['incident_energy_cal_cm2'], 0.0)
         self.assertGreater(result['summary']['arc_flash_boundary_mm'], 0.0)
         self.assertEqual(result['assumptions']['study_bus_id'], 'bus-2')
+        self.assertEqual(result['guidance']['confidence']['level'], 'supported')
+        self.assertTrue(result['guidance']['summary_label'])
         self.assertTrue(result['limitations'])
 
 

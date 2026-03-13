@@ -19,6 +19,9 @@ class ArcFlashInputTests(unittest.TestCase):
         self.assertEqual(result['assumptions']['fault_clearing']['mode'], 'fixed_time')
         self.assertGreater(result['assumptions']['working_distance_mm'], 0.0)
         self.assertIn('calculation', result)
+        self.assertEqual(result['guidance']['confidence']['level'], 'supported')
+        self.assertIn('severity_band', result['guidance'])
+        self.assertTrue(result['guidance']['summary_label'])
 
     def test_arc_flash_accepts_device_based_clearing_assumption(self):
         protection_payload = make_protection_study_input()
@@ -39,6 +42,18 @@ class ArcFlashInputTests(unittest.TestCase):
         self.assertEqual(result['assumptions']['fault_clearing']['device_name'], 'Motor Relay')
         self.assertGreater(result['summary']['clearing_time_s'], 0.0)
         self.assertIn('Protection device', result['assumptions']['fault_clearing']['assumption_label'])
+        self.assertEqual(result['guidance']['confidence']['level'], 'review')
+        self.assertTrue(result['guidance']['cautions'])
+
+    def test_arc_flash_withholds_ppe_guidance_for_open_air_equipment(self):
+        result = calculate_arc_flash(
+            make_arc_flash_input(equipment_class='switchboard', enclosure_type='open_air')
+        )
+
+        self.assertEqual(result['guidance']['confidence']['level'], 'review')
+        self.assertIsNone(result['guidance']['ppe_category'])
+        self.assertTrue(result['guidance']['unsupported_labels'])
+        self.assertEqual(result['summary']['ppe_category'], None)
 
     def test_arc_flash_rejects_missing_fixed_clearing_time(self):
         with self.assertRaises(HTTPException) as context:
