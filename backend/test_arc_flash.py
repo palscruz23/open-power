@@ -7,13 +7,18 @@ from backend.test_study_samples import make_arc_flash_input, make_protection_stu
 
 
 class ArcFlashInputTests(unittest.TestCase):
-    def test_arc_flash_validates_fixed_time_assumptions(self):
+    def test_arc_flash_calculates_incident_energy_for_fixed_time_assumptions(self):
         result = calculate_arc_flash(make_arc_flash_input())
 
-        self.assertEqual(result['status'], 'ready')
+        self.assertEqual(result['status'], 'completed')
+        self.assertGreater(result['summary']['incident_energy_cal_cm2'], 0.0)
+        self.assertGreater(result['summary']['arc_flash_boundary_mm'], 0.0)
+        self.assertGreater(result['summary']['available_fault_current_ka'], 0.0)
+        self.assertGreater(result['summary']['arcing_current_ka'], 0.0)
         self.assertEqual(result['assumptions']['study_bus_id'], 'bus-2')
         self.assertEqual(result['assumptions']['fault_clearing']['mode'], 'fixed_time')
         self.assertGreater(result['assumptions']['working_distance_mm'], 0.0)
+        self.assertIn('calculation', result)
 
     def test_arc_flash_accepts_device_based_clearing_assumption(self):
         protection_payload = make_protection_study_input()
@@ -31,7 +36,9 @@ class ArcFlashInputTests(unittest.TestCase):
         result = calculate_arc_flash(arc_flash_payload)
 
         self.assertEqual(result['assumptions']['fault_clearing']['device_id'], 'load-1')
-        self.assertIn('Protection device assumption', result['assumptions']['fault_clearing']['assumption_label'])
+        self.assertEqual(result['assumptions']['fault_clearing']['device_name'], 'Motor Relay')
+        self.assertGreater(result['summary']['clearing_time_s'], 0.0)
+        self.assertIn('Protection device', result['assumptions']['fault_clearing']['assumption_label'])
 
     def test_arc_flash_rejects_missing_fixed_clearing_time(self):
         with self.assertRaises(HTTPException) as context:
@@ -40,6 +47,12 @@ class ArcFlashInputTests(unittest.TestCase):
             )
 
         self.assertIn('fixed clearing time', str(context.exception.detail).lower())
+
+    def test_arc_flash_rejects_unsupported_open_air_mcc_case(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_arc_flash(make_arc_flash_input(equipment_class='mcc', enclosure_type='open_air'))
+
+        self.assertIn('enclosed equipment only', str(context.exception.detail).lower())
 
 
 if __name__ == '__main__':
