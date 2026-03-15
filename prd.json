@@ -261,7 +261,7 @@
         "Typecheck/build passes"
       ],
       "priority": 16,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Keep safety guidance traceable to the calculation assumptions so the UI does not overstate engineering certainty."
     },

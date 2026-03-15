@@ -700,6 +700,36 @@ pre {
   color: #48576a;
 }
 
+.result-feedback-card {
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #d8dee8;
+  background: #ffffff;
+}
+
+.result-feedback-card strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.83rem;
+  color: #213042;
+}
+
+.result-feedback-card--warning {
+  border-color: #f2c98a;
+  background: linear-gradient(135deg, #fffaf2 0%, #fff4df 100%);
+}
+
+.result-feedback-card--neutral {
+  border-color: #d8dee8;
+  background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 100%);
+}
+
+.result-feedback-card--review {
+  border-color: #bfd6ff;
+  background: linear-gradient(135deg, #f7fbff 0%, #edf5ff 100%);
+}
+
 .result-state-card {
   display: grid;
   gap: 0.3rem;

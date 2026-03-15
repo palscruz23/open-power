@@ -19,6 +19,7 @@
 - Protection coordination feedback should extend the backend `analysis` block (`warning_count`, `warnings`, `scope_notes`) so warnings and out-of-scope notes stay separate from chart data and device summaries.
 - Advanced-study validation should be duplicated intentionally: `LoadFlowStudyPage.jsx` should preflight disconnected protection assets and unsupported study modes for fast UI feedback, while `backend/main.py` must enforce the same rules with explicit HTTP 400 messages.
 - Arc-flash backend results should reuse the existing short-circuit and protection helpers for available fault current and device clearing time, then expose study outputs through `summary`, `assumptions`, `calculation`, and `limitations` blocks so the frontend can extend rendering without a second payload shape.
+- Arc-flash safety review labels should be emitted from a dedicated backend `guidance` block; keep frontend PPE/severity rendering and transient canvas labels tied to that block instead of inferring guidance from raw numeric summary fields.
 
 ## 2026-03-10 00:45:07 +10:30 - US-001
 - Added a short-circuit calculation standard selector with `ANSI` and `IEC 60909` options to the shared study workflow.

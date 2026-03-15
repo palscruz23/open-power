@@ -702,6 +702,61 @@ ARC_FLASH_EQUIPMENT_LIBRARY = {
 
 
 ARC_FLASH_INCIDENT_ENERGY_REFERENCE_CAL_CM2 = 1.2
+ARC_FLASH_SEVERITY_BANDS = (
+    {
+        'id': 'minimal',
+        'label': 'Minimal Energy',
+        'max_cal_cm2': 1.2,
+        'summary_label': 'Minimal energy exposure',
+    },
+    {
+        'id': 'moderate',
+        'label': 'Moderate Energy',
+        'max_cal_cm2': 4.0,
+        'summary_label': 'Moderate arc-flash exposure',
+    },
+    {
+        'id': 'elevated',
+        'label': 'Elevated Energy',
+        'max_cal_cm2': 8.0,
+        'summary_label': 'Elevated arc-flash exposure',
+    },
+    {
+        'id': 'high',
+        'label': 'High Energy',
+        'max_cal_cm2': 25.0,
+        'summary_label': 'High arc-flash exposure',
+    },
+    {
+        'id': 'extreme',
+        'label': 'Extreme Energy',
+        'max_cal_cm2': None,
+        'summary_label': 'Extreme arc-flash exposure',
+    },
+)
+
+ARC_FLASH_PPE_CATEGORIES = (
+    {
+        'category': 'PPE 1',
+        'max_cal_cm2': 4.0,
+        'summary_label': 'PPE 1 guidance available',
+    },
+    {
+        'category': 'PPE 2',
+        'max_cal_cm2': 8.0,
+        'summary_label': 'PPE 2 guidance available',
+    },
+    {
+        'category': 'PPE 3',
+        'max_cal_cm2': 25.0,
+        'summary_label': 'PPE 3 guidance available',
+    },
+    {
+        'category': 'PPE 4',
+        'max_cal_cm2': 40.0,
+        'summary_label': 'PPE 4 guidance available',
+    },
+)
 
 
 def get_arc_flash_equipment_config(payload: ArcFlashInput) -> Dict[str, float | str | None]:
@@ -722,6 +777,93 @@ def get_arc_flash_equipment_config(payload: ArcFlashInput) -> Dict[str, float | 
         )
 
     return equipment_config
+
+
+def derive_arc_flash_severity_band(incident_energy_cal_cm2: float) -> Dict[str, str]:
+    for band in ARC_FLASH_SEVERITY_BANDS:
+        max_value = band['max_cal_cm2']
+        if max_value is None or incident_energy_cal_cm2 <= max_value:
+            return {
+                'id': band['id'],
+                'label': band['label'],
+                'summary_label': band['summary_label']
+            }
+
+    fallback_band = ARC_FLASH_SEVERITY_BANDS[-1]
+    return {
+        'id': fallback_band['id'],
+        'label': fallback_band['label'],
+        'summary_label': fallback_band['summary_label']
+    }
+
+
+def derive_arc_flash_ppe_category(incident_energy_cal_cm2: float) -> Dict[str, str] | None:
+    for category in ARC_FLASH_PPE_CATEGORIES:
+        if incident_energy_cal_cm2 <= category['max_cal_cm2']:
+            return {
+                'category': category['category'],
+                'summary_label': category['summary_label']
+            }
+    return None
+
+
+def build_arc_flash_guidance(
+    payload: ArcFlashInput,
+    incident_energy_cal_cm2: float,
+    clearing_summary: Dict[str, object]
+) -> Dict[str, object]:
+    severity_band = derive_arc_flash_severity_band(incident_energy_cal_cm2)
+    missing_assumptions: List[str] = []
+    unsupported_labels: List[str] = []
+    cautions: List[str] = []
+    confidence_level = 'supported'
+
+    ppe_category = None
+    if payload.method != 'ieee_1584':
+        unsupported_labels.append(
+            f'PPE guidance is only defined for IEEE 1584 studies in this release; method "{payload.method}" is not supported.'
+        )
+    elif payload.enclosure_type != 'enclosed':
+        unsupported_labels.append(
+            'PPE guidance is withheld for open-air equipment because this release only maps simplified PPE categories for enclosed equipment assumptions.'
+        )
+    else:
+        ppe_category = derive_arc_flash_ppe_category(incident_energy_cal_cm2)
+        if ppe_category is None:
+            unsupported_labels.append(
+                'PPE guidance is withheld above 40 cal/cm^2; treat this location as requiring detailed engineering review instead of a derived category.'
+            )
+
+    if clearing_summary.get('mode') == 'protective_device':
+        confidence_level = 'review'
+        cautions.append(
+            'PPE and severity guidance uses a protective-device clearing estimate derived from the configured TCC settings rather than measured relay logic or coordination study output.'
+        )
+
+    if payload.enclosure_type == 'open_air':
+        confidence_level = 'review'
+        cautions.append(
+            'Open-air equipment uses the same simplified arcing-current model but should be reviewed carefully before converting the result into work-practice controls.'
+        )
+
+    guidance_label_parts = []
+    if ppe_category is not None:
+        guidance_label_parts.append(ppe_category['category'])
+    if severity_band.get('label'):
+        guidance_label_parts.append(severity_band['label'])
+
+    return {
+        'confidence': {
+            'level': confidence_level,
+            'label': 'Supported guidance' if confidence_level == 'supported' else 'Engineering review recommended'
+        },
+        'severity_band': severity_band,
+        'ppe_category': ppe_category,
+        'summary_label': ' / '.join(guidance_label_parts) if guidance_label_parts else severity_band['label'],
+        'missing_assumptions': missing_assumptions,
+        'unsupported_labels': unsupported_labels,
+        'cautions': cautions
+    }
 
 
 def validate_arc_flash_method_scope(payload: ArcFlashInput, study_bus: Bus) -> None:
@@ -1835,6 +1977,7 @@ def calculate_arc_flash(payload: ArcFlashInput):
         float(payload.working_distance_mm)
         * ((incident_energy_cal_cm2 / ARC_FLASH_INCIDENT_ENERGY_REFERENCE_CAL_CM2) ** (1.0 / distance_exponent))
     )
+    guidance = build_arc_flash_guidance(payload, incident_energy_cal_cm2, clearing_summary)
 
     return {
         'status': 'completed',
@@ -1848,6 +1991,8 @@ def calculate_arc_flash(payload: ArcFlashInput):
             'available_fault_current_ka': round(bolted_fault_current_a / 1000.0, 5),
             'arcing_current_ka': round(arcing_current_a / 1000.0, 5),
             'clearing_time_s': round(clearing_time_s, 5),
+            'severity_band': guidance['severity_band']['label'],
+            'ppe_category': guidance['ppe_category']['category'] if guidance['ppe_category'] else None,
         },
         'assumptions': {
             'method': payload.method,
@@ -1869,6 +2014,7 @@ def calculate_arc_flash(payload: ArcFlashInput):
             'normalized_incident_energy_cal_cm2': energy_summary['normalized_incident_energy_cal_cm2'],
             'raw_arc_energy_kj': energy_summary['raw_arc_energy_kj'],
         },
+        'guidance': guidance,
         'limitations': [
             'This release uses a simplified IEEE 1584-inspired empirical model derived from the network short-circuit current, equipment class, enclosure type, and working distance.',
             'Only three-phase AC studies between 0.208 kV and 15 kV are supported; electrode configuration, conductor geometry, and enclosure dimensions are not user-configurable yet.',

@@ -86,6 +86,12 @@ function formatArcFlashWorkingDistance(value) {
   return `${numericValue.toFixed(0)} mm`;
 }
 
+function formatArcFlashConfidence(value) {
+  if (value === 'supported') return 'Supported guidance';
+  if (value === 'review') return 'Engineering review recommended';
+  return value || '-';
+}
+
 function buildLogTicks(minValue, maxValue) {
   const safeMin = clampLogDomain(minValue, 1);
   const safeMax = clampLogDomain(maxValue, safeMin * 10);
@@ -714,6 +720,15 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   const assumptions = result?.assumptions || {};
   const clearing = assumptions?.fault_clearing || {};
   const limitations = Array.isArray(result?.limitations) ? result.limitations : [];
+  const guidance = result?.guidance || {};
+  const guidanceConfidence = guidance?.confidence || {};
+  const missingAssumptions = Array.isArray(guidance?.missing_assumptions)
+    ? guidance.missing_assumptions
+    : [];
+  const unsupportedLabels = Array.isArray(guidance?.unsupported_labels)
+    ? guidance.unsupported_labels
+    : [];
+  const cautions = Array.isArray(guidance?.cautions) ? guidance.cautions : [];
   const incidentEnergy =
     result?.incident_energy_cal_cm2 ??
     result?.incident_energy?.cal_cm2 ??
@@ -726,6 +741,10 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   const calculation = result?.calculation || {};
   const hasCalculatedOutputs =
     Number.isFinite(Number(incidentEnergy)) || Number.isFinite(Number(boundary));
+  const severityLabel =
+    guidance?.severity_band?.label || result?.summary?.severity_band || '-';
+  const ppeCategory =
+    guidance?.ppe_category?.category || result?.summary?.ppe_category || '-';
   const keyAssumptions = [
     {
       label: 'Equipment Class',
@@ -802,12 +821,16 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
             <strong>{formatArcFlashBoundary(boundary)}</strong>
           </div>
           <div>
-            <span>Hazard Label</span>
-            <strong>{result?.hazard_category || result?.summary?.hazard_category || '-'}</strong>
+            <span>Severity Band</span>
+            <strong>{severityLabel}</strong>
           </div>
           <div>
             <span>PPE Category</span>
-            <strong>{result?.ppe_category || result?.summary?.ppe_category || '-'}</strong>
+            <strong>{ppeCategory}</strong>
+          </div>
+          <div>
+            <span>Guidance Confidence</span>
+            <strong>{formatArcFlashConfidence(guidanceConfidence?.level)}</strong>
           </div>
         </div>
         {!hasCalculatedOutputs && (
@@ -1043,6 +1066,11 @@ export default function ControlPanel({
           <p>
             Capture the minimum study assumptions here without persisting arc-flash results into
             the shared one-line diagram.
+          </p>
+          <p>
+            Derived PPE guidance is only shown when the IEEE 1584 enclosed-equipment assumptions
+            support it. Open-air or device-estimated cases will still calculate energy, but the
+            review panel will downgrade confidence or withhold unsupported labels.
           </p>
           <label>
             Assessment Method
