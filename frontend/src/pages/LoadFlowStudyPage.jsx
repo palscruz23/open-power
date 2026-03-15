@@ -134,6 +134,23 @@ function getSourceReachableBusIds(nodes, edges) {
   return reachableBusIds;
 }
 
+function getArcFlashAnnotationTargetIds(nodes, edges, studyBusId) {
+  if (!studyBusId) return new Set();
+
+  const targetIds = new Set([studyBusId]);
+  edges.forEach((edge) => {
+    if (edge.source === studyBusId && edge.target !== studyBusId) {
+      targetIds.add(edge.target);
+    }
+    if (edge.target === studyBusId && edge.source !== studyBusId) {
+      targetIds.add(edge.source);
+    }
+  });
+
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  return new Set([...targetIds].filter((nodeId) => nodeIds.has(nodeId)));
+}
+
 function sanitizeNodeForPersistence(node) {
   const nextData = { ...(node?.data || {}) };
   TRANSIENT_NODE_DATA_KEYS.forEach((key) => {
@@ -1317,6 +1334,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
           const arcFlashResult = response.data || {};
           const assumptions = arcFlashResult.assumptions || {};
           const studyBusId = assumptions.study_bus_id || arcFlashStudyBusId;
+          const annotationTargetIds = getArcFlashAnnotationTargetIds(nodes, edges, studyBusId);
 
           const incidentEnergyCalCm2 =
             Number(
@@ -1346,10 +1364,15 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
             arcFlashResult.summary?.label ||
             (assumptions.method === 'ieee_1584' ? 'IEEE 1584 Arc Flash' : 'Arc Flash');
           const equipmentLabel = assumptions.equipment_label || arcFlashEquipmentLabel.trim();
+          const connectedEquipmentCount = Math.max(annotationTargetIds.size - 1, 0);
+          const nodeArcFlashLabel =
+            connectedEquipmentCount > 0 ? `${arcFlashLabel} Review` : arcFlashLabel;
+          const equipmentArcFlashLabel =
+            connectedEquipmentCount > 0 ? `Affected Equipment (${connectedEquipmentCount})` : arcFlashLabel;
 
           setNodes((currentNodes) =>
             currentNodes.map((node) => {
-              if (node.id !== studyBusId) {
+              if (!annotationTargetIds.has(node.id)) {
                 return {
                   ...node,
                   data: {
@@ -1368,7 +1391,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
                 ...node,
                 data: {
                   ...node.data,
-                  arcFlashLabel,
+                  arcFlashLabel: node.id === studyBusId ? nodeArcFlashLabel : equipmentArcFlashLabel,
                   arcFlashIncidentEnergyCalCm2: incidentEnergyCalCm2,
                   arcFlashBoundaryMm: boundaryMm,
                   arcFlashWorkingDistanceMm: workingDistanceMm,
