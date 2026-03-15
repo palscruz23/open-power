@@ -684,10 +684,10 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   if (isLoading) {
     return (
       <div className="study-result study-result--arcflash">
-        <h4>Arc-Flash Study Status</h4>
+        <h4>Arc-Flash Results</h4>
         <div className="result-state-card result-state-card--loading">
-          <strong>Validating arc-flash inputs</strong>
-          <span>Checking the selected equipment, working distance, and clearing assumptions.</span>
+          <strong>Calculating arc-flash exposure</strong>
+          <span>Checking the selected equipment, clearing assumptions, and incident-energy outputs.</span>
         </div>
       </div>
     );
@@ -696,9 +696,9 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   if (error) {
     return (
       <div className="study-result study-result--arcflash">
-        <h4>Arc-Flash Study Status</h4>
+        <h4>Arc-Flash Results</h4>
         <div className="result-state-card result-state-card--error">
-          <strong>Arc-flash setup failed</strong>
+          <strong>Arc-flash study failed</strong>
           <span>{error}</span>
         </div>
       </div>
@@ -708,10 +708,10 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
   if (!result) {
     return (
       <div className="study-result study-result--arcflash">
-        <h4>Arc-Flash Study Status</h4>
+        <h4>Arc-Flash Results</h4>
         <div className="result-state-card">
-          <strong>{reviewRequested ? 'Arc-flash inputs updated' : 'No arc-flash review yet'}</strong>
-          <span>Run the arc-flash review to validate study inputs and working assumptions.</span>
+          <strong>{reviewRequested ? 'Arc-flash inputs updated' : 'No arc-flash study yet'}</strong>
+          <span>Run the arc-flash study to review incident energy, boundary, and working assumptions.</span>
         </div>
       </div>
     );
@@ -738,6 +738,7 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
     result?.arc_flash_boundary?.mm ??
     result?.summary?.arc_flash_boundary_mm;
   const workingDistance = assumptions?.working_distance_mm ?? result?.summary?.working_distance_mm;
+  const calculation = result?.calculation || {};
   const hasCalculatedOutputs =
     Number.isFinite(Number(incidentEnergy)) || Number.isFinite(Number(boundary));
   const severityLabel =
@@ -840,56 +841,39 @@ function renderArcFlashResults(result, error, isLoading, reviewRequested) {
         )}
       </div>
       <div className="result-section">
-        <h5>Guidance Feedback</h5>
-        <div className="result-list">
-          <div className="result-list-row">
-            <div>
-              <strong>Guidance Summary</strong>
-              <span>Derived labels returned directly from the backend study assumptions.</span>
-            </div>
-            <div>{guidance?.summary_label || '-'}</div>
+        <h5>Calculation Snapshot</h5>
+        <div className="result-summary-grid result-summary-grid--arcflash">
+          <div>
+            <span>Available Fault Current</span>
+            <strong>
+              {Number.isFinite(Number(calculation?.available_bolted_fault_current_ka))
+                ? formatCurrentFromKa(Number(calculation.available_bolted_fault_current_ka))
+                : '-'}
+            </strong>
           </div>
-          <div className="result-list-row">
-            <div>
-              <strong>Confidence</strong>
-              <span>Use this to separate supported labels from cases that still need engineering judgement.</span>
-            </div>
-            <div>{formatArcFlashConfidence(guidanceConfidence?.level)}</div>
+          <div>
+            <span>Estimated Arcing Current</span>
+            <strong>
+              {Number.isFinite(Number(calculation?.estimated_arcing_current_ka))
+                ? formatCurrentFromKa(Number(calculation.estimated_arcing_current_ka))
+                : '-'}
+            </strong>
+          </div>
+          <div>
+            <span>Clearing Time</span>
+            <strong>
+              {Number.isFinite(Number(clearing?.duration_s)) ? `${Number(clearing.duration_s).toFixed(3)} s` : '-'}
+            </strong>
+          </div>
+          <div>
+            <span>Electrode Gap</span>
+            <strong>
+              {Number.isFinite(Number(calculation?.electrode_gap_mm))
+                ? `${Number(calculation.electrode_gap_mm).toFixed(0)} mm`
+                : '-'}
+            </strong>
           </div>
         </div>
-        {missingAssumptions.length > 0 ? (
-          <div className="result-feedback-card result-feedback-card--warning">
-            <strong>Missing assumptions for guidance</strong>
-            <ul className="result-limitations">
-              {missingAssumptions.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {unsupportedLabels.length > 0 ? (
-          <div className="result-feedback-card result-feedback-card--neutral">
-            <strong>Unsupported labels withheld</strong>
-            <ul className="result-limitations">
-              {unsupportedLabels.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {cautions.length > 0 ? (
-          <div className="result-feedback-card result-feedback-card--review">
-            <strong>Low-confidence or review notes</strong>
-            <ul className="result-limitations">
-              {cautions.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {missingAssumptions.length === 0 && unsupportedLabels.length === 0 && cautions.length === 0 ? (
-          <p className="result-empty">No additional guidance warnings were reported.</p>
-        ) : null}
       </div>
       <div className="result-section">
         <h5>Key Assumptions</h5>
@@ -1006,7 +990,7 @@ export default function ControlPanel({
       <div className="buttons">
         {isLoadFlow && <button onClick={onRunLoadFlow}>Run Load Flow</button>}
         {isShortCircuit && <button onClick={onRunShortCircuit}>Run Short Circuit</button>}
-        {isArcFlash && <button onClick={onRunArcFlash}>Review Arc Flash Readiness</button>}
+        {isArcFlash && <button onClick={onRunArcFlash}>Run Arc Flash Study</button>}
         {isProtection && <button onClick={onRunProtection}>Run Protection Coordination</button>}
       </div>
 
@@ -1179,8 +1163,8 @@ export default function ControlPanel({
             </label>
           )}
           <p className="result-note">
-            Run this review to validate the minimum arc-flash request model before incident-energy
-            calculations land.
+            Run the study to validate the request model and review the returned incident-energy
+            outputs on the canvas and in this panel.
           </p>
         </div>
       )}
