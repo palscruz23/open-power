@@ -1,6 +1,7 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
 - Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
+- Arc-flash regression coverage should keep focused request-model edge cases in `backend/test_arc_flash.py` and mirror one successful sample plus one invalid-assumption case in `backend/test_study_verification.py` so the shared study suite exercises the maintained fixtures too.
 - Shared load-flow and short-circuit diagrams persist through `getStorageKey()` and `sanitizeGraphForPersistence()` in `frontend/src/pages/LoadFlowStudyPage.jsx`; keep study-specific controls in component state and out of the saved graph payload.
 - UI-only study tabs should keep draft inputs and readiness/run state in local React state rather than extending `buildNetworkModel()` or persisting extra study data into the shared graph.
 - Frontend-only placeholder studies should add their tab/route in `frontend/src/App.jsx`, keep draft inputs in `LoadFlowStudyPage.jsx`, and render prerequisites plus disabled outputs from `frontend/src/components/ControlPanel.jsx` until backend support exists.
@@ -231,4 +232,13 @@
   - Arc-flash frontend result rendering should use the backend `summary`, `assumptions`, and `calculation` blocks directly in `ControlPanel.jsx` rather than falling back to placeholder readiness copy once the backend is live.
   - Arc-flash overlays are more readable when `LoadFlowStudyPage.jsx` targets the study bus plus adjacent equipment nodes, while `SymbolNodes.jsx` stays responsible for the shared transient badge layout.
   - Checks run this iteration: `cmd /c npm run build` was attempted from `frontend/` and failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-13 23:06:16 +10:30 - US-017
+- Added the missing representative arc-flash validation case to `backend/test_study_verification.py` so the shared study suite now covers both a successful arc-flash run and an invalid fixed-clearing assumption.
+- Updated verification documentation to use the current representative-study module name and include `backend.test_arc_flash` in the documented backend regression command.
+- Files changed: `backend/test_study_verification.py`, `README.md`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - The shared representative suite is the maintained verification entry point for cross-study samples; if arc-flash validation rules change, mirror one representative failure there in addition to any focused unit checks in `backend/test_arc_flash.py`.
+  - Keep README verification commands aligned with the actual unittest module names; this repo now uses `backend.test_study_verification`, not the older `backend.test_representative_studies`.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_study_verification` passed; `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_protection backend.test_arc_flash backend.test_study_verification` passed.
 ---

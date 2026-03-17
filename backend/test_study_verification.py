@@ -1,5 +1,7 @@
 import unittest
 
+from fastapi import HTTPException
+
 from backend.main import (
     calculate_arc_flash,
     calculate_load_flow,
@@ -64,6 +66,16 @@ class RepresentativeStudyVerificationTests(unittest.TestCase):
         self.assertEqual(result['guidance']['confidence']['level'], 'supported')
         self.assertTrue(result['guidance']['summary_label'])
         self.assertTrue(result['limitations'])
+
+    def test_arc_flash_validation_rejects_missing_fixed_clearing_time(self):
+        with self.assertRaises(HTTPException) as context:
+            calculate_arc_flash(
+                make_arc_flash_input(
+                    fault_clearing={'mode': 'fixed_time', 'duration_s': None, 'device_id': None}
+                )
+            )
+
+        self.assertIn('fixed clearing time', str(context.exception.detail).lower())
 
 
 if __name__ == '__main__':
