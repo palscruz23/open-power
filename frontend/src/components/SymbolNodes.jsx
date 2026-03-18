@@ -1,4 +1,5 @@
 import { Handle, Position } from 'reactflow';
+import { getProtectionDeviceTypeLabel } from '../utils/protectionDefaults';
 import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
 
 const numberFormatter = new Intl.NumberFormat('en-US', {
@@ -84,6 +85,10 @@ function NodeShell({
     data?.arcFlashIncidentEnergyCalCm2 != null || data?.arcFlashBoundaryMm != null
   );
   const hasRatings = showRating && ratingItems.length > 0;
+  const hasProtectionDevice = Boolean(data?.protection?.enabled);
+  const protectionLabel = hasProtectionDevice
+    ? data?.protection?.name || getProtectionDeviceTypeLabel(data?.protection?.device_type)
+    : null;
 
   return (
     <div className={`symbol-node ${className}`}>
@@ -106,6 +111,7 @@ function NodeShell({
         )}
       </div>
       <div className="symbol-label">{data.label}</div>
+      {hasProtectionDevice && <div className="protection-chip">{protectionLabel}</div>}
       {hasFaultResult && (
         <div className="fault-metrics">
           {data?.faultContextLabel && <div className="fault-context">{data.faultContextLabel}</div>}

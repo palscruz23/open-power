@@ -28,18 +28,15 @@ import {
   buildProtectionPayload,
   buildShortCircuitPayload
 } from '../utils/networkPayload';
+import {
+  buildProtectionDefaults,
+  PROTECTION_ELIGIBLE_NODE_TYPES
+} from '../utils/protectionDefaults';
 import { formatCurrentFromKa } from '../utils/unitFormat';
 
 const API_BASE = 'http://127.0.0.1:8000';
 const STORAGE_KEY_PREFIX = 'openpower:network:';
 const LOAD_FLOW_NODE_TYPES = new Set(['load', 'resistive_load', 'generator', 'utility']);
-const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
-  'load',
-  'resistive_load',
-  'generator',
-  'utility',
-  'transformer'
-]);
 const TRANSIENT_NODE_DATA_KEYS = new Set([
   'isFaulted',
   'isFaultSelected',
@@ -239,6 +236,29 @@ const defaultDataByType = {
   })
 };
 
+function parsePaletteDrop(rawValue) {
+  if (!rawValue) return null;
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed.type === 'string' ? parsed : null;
+  } catch {
+    return { type: rawValue, protectionPreset: null };
+  }
+}
+
+function buildNodeData(type, index, protectionPreset = null) {
+  const baseData = defaultDataByType[type](index);
+  if (!protectionPreset?.device_type || !PROTECTION_ELIGIBLE_NODE_TYPES.has(type)) {
+    return baseData;
+  }
+
+  return {
+    ...baseData,
+    protection: buildProtectionDefaults(baseData.label, protectionPreset.device_type)
+  };
+}
+
 export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const initialGraph = useMemo(() => loadPersistedGraph(studyType), [studyType]);
   const reactFlowWrapper = useRef(null);
@@ -436,7 +456,8 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
   const onDrop = useCallback(
     (event) => {
       event.preventDefault();
-      const type = event.dataTransfer.getData('application/reactflow');
+      const dropItem = parsePaletteDrop(event.dataTransfer.getData('application/reactflow'));
+      const type = dropItem?.type;
       if (!type || !rfInstance || !reactFlowWrapper.current) return;
 
       if (type === 'bus' && busCount >= 20) {
@@ -455,7 +476,7 @@ export default function LoadFlowStudyPage({ studyType = 'loadflow' }) {
         id: `${type}-${Date.now()}`,
         type,
         position,
-        data: defaultDataByType[type](countByType)
+        data: buildNodeData(type, countByType, dropItem?.protectionPreset)
       };
 
       setNodes((nds) => nds.concat(newNode));

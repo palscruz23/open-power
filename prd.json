@@ -309,7 +309,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 19,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Keep the protection model aligned across component defaults, editors, payload mapping, and backend validation."
     },

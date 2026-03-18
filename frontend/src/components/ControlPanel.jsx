@@ -1,27 +1,12 @@
 import { useMemo, useState } from 'react';
+import {
+  buildProtectionDefaults,
+  getProtectionDeviceTypeLabel,
+  PROTECTION_CURVE_OPTIONS,
+  PROTECTION_DEVICE_TYPE_OPTIONS,
+  PROTECTION_ELIGIBLE_NODE_TYPES
+} from '../utils/protectionDefaults';
 import { formatCurrentFromKa, formatVoltageFromKv } from '../utils/unitFormat';
-
-const PROTECTION_DEVICE_TYPE_OPTIONS = [
-  { value: 'oc_relay', label: 'Overcurrent Relay' },
-  { value: 'recloser', label: 'Recloser' },
-  { value: 'fuse', label: 'Fuse' }
-];
-
-const PROTECTION_CURVE_OPTIONS = [
-  { value: 'iec_standard_inverse', label: 'IEC Standard Inverse' },
-  { value: 'iec_very_inverse', label: 'IEC Very Inverse' },
-  { value: 'ansi_moderately_inverse', label: 'ANSI Moderately Inverse' },
-  { value: 'ansi_very_inverse', label: 'ANSI Very Inverse' },
-  { value: 'ansi_k', label: 'ANSI K Fuse' }
-];
-
-const PROTECTION_ELIGIBLE_NODE_TYPES = new Set([
-  'load',
-  'resistive_load',
-  'generator',
-  'utility',
-  'transformer'
-]);
 
 const PROTECTION_CURVE_STYLES = [
   { color: '#0f6d34', dasharray: '0' },
@@ -957,21 +942,43 @@ export default function ControlPanel({
   const selectedNodeSupportsProtection = selectedNode && PROTECTION_ELIGIBLE_NODE_TYPES.has(selectedNode.type);
   const protection = selectedNodeSupportsProtection ? selectedNode.data.protection || {} : null;
   const protectionEnabled = Boolean(protection?.enabled);
+  const protectionTypeLabel = protectionEnabled
+    ? getProtectionDeviceTypeLabel(protection?.device_type)
+    : null;
 
   const updateProtection = (field, value) => {
     if (!selectedNodeSupportsProtection) return;
-    onUpdateNode('protection', {
-      phase_mode: 'phase',
-      device_type: 'oc_relay',
-      curve_family: 'iec_standard_inverse',
-      pickup_current_a: '',
-      time_dial: '',
-      instantaneous_pickup_a: '',
-      clearing_time_adder_s: 0,
-      name: `${selectedNode.data.label} Relay`,
-      ...(selectedNode.data.protection || {}),
-      [field]: value
-    });
+    const currentProtection = selectedNode.data.protection || {};
+
+    if (field === 'device_type') {
+      const nextProtection = buildProtectionDefaults(selectedNode.data.label, value, currentProtection);
+      const previousDefaults = buildProtectionDefaults(
+        selectedNode.data.label,
+        currentProtection.device_type || 'oc_relay'
+      );
+
+      onUpdateNode('protection', {
+        ...nextProtection,
+        name:
+          !currentProtection.name || currentProtection.name === previousDefaults.name
+            ? nextProtection.name
+            : currentProtection.name,
+        curve_family:
+          !currentProtection.curve_family ||
+          currentProtection.curve_family === previousDefaults.curve_family
+            ? nextProtection.curve_family
+            : currentProtection.curve_family
+      });
+      return;
+    }
+
+    onUpdateNode(
+      'protection',
+      buildProtectionDefaults(selectedNode.data.label, currentProtection.device_type || 'oc_relay', {
+        ...currentProtection,
+        [field]: value
+      })
+    );
   };
 
   const panelTitle = isLoadFlow
@@ -1374,29 +1381,45 @@ export default function ControlPanel({
           {selectedNodeSupportsProtection && (
             <>
               <h4>Protection Device</h4>
+              <p className="result-note">
+                Use a protection-ready palette item or enable a device here. Protection settings stay
+                on the asset and serialize into the shared <code>protection_devices</code> study payload.
+              </p>
               <label className="checkbox-row">
                 <input
                   type="checkbox"
                   checked={protectionEnabled}
                   onChange={(e) =>
-                    onUpdateNode('protection', {
-                      phase_mode: 'phase',
-                      device_type: 'oc_relay',
-                      curve_family: 'iec_standard_inverse',
-                      pickup_current_a: '',
-                      time_dial: '',
-                      instantaneous_pickup_a: '',
-                      clearing_time_adder_s: 0,
-                      name: `${selectedNode.data.label} Relay`,
-                      ...(selectedNode.data.protection || {}),
-                      enabled: e.target.checked
-                    })
+                    onUpdateNode(
+                      'protection',
+                      e.target.checked
+                        ? buildProtectionDefaults(
+                            selectedNode.data.label,
+                            selectedNode.data.protection?.device_type || 'oc_relay',
+                            { ...(selectedNode.data.protection || {}), enabled: true }
+                          )
+                        : {
+                            ...buildProtectionDefaults(
+                              selectedNode.data.label,
+                              selectedNode.data.protection?.device_type || 'oc_relay',
+                              selectedNode.data.protection || {}
+                            ),
+                            enabled: false
+                          }
+                    )
                   }
                 />
                 Enable protection device on this asset
               </label>
               {protectionEnabled && (
                 <>
+                  <div className="result-state-card">
+                    <strong>{protectionTypeLabel}</strong>
+                    <span>
+                      Studied on this {selectedNode.type.replace('_', ' ')} asset as{' '}
+                      <code>{selectedNode.id}</code>.
+                    </span>
+                  </div>
                   <label>
                     Device Name
                     <input
