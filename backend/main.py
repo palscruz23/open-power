@@ -366,12 +366,16 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
         return {
             'standard_label': 'ANSI',
             'engine_note': (
-                'Calculated with pandapower short-circuit max-case results and presented with ANSI-oriented labels.'
+                'Calculated from pandapower IEC 60909 max-case results, then converted to an ANSI-oriented '
+                'nominal-voltage duty because this release does not yet implement a full ANSI C37 network engine.'
             ),
             'limitations': [
                 'ANSI mode currently supports only three-phase faults.',
-                'ANSI thermal equivalent current is not available in this release.'
+                'ANSI thermal equivalent current is not available in this release.',
+                'ANSI duties are derived from the IEC 60909 max-case engine with a nominal-voltage conversion, '
+                'so source-specific ANSI decrement and breaker-duty options are not separately modeled yet.'
             ],
+            'voltage_factor_mode': 'nominal_from_iec_max',
             'current_types': {
                 'initial_symmetrical': {
                     'bus_candidates': ['ikss_ka'],
@@ -408,6 +412,7 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
         'standard_label': 'IEC 60909',
         'engine_note': 'Calculated with pandapower IEC 60909 short-circuit results.',
         'limitations': [],
+        'voltage_factor_mode': 'iec_max',
         'current_types': {
             'initial_symmetrical': {
                 'bus_candidates': ['ikss_ka'],
@@ -453,6 +458,11 @@ def get_short_circuit_standard_config(payload: ShortCircuitInput) -> Dict[str, o
             }
         }
     }
+
+
+def get_iec_max_voltage_factor(voltage_kv: float) -> float:
+    # IEC 60909 max-case studies apply an operating-voltage factor above nominal voltage.
+    return 1.1 if voltage_kv > 1.0 else 1.05
 
 
 def validate_protection_study(payload: ProtectionStudyInput) -> List[Dict[str, object]]:
@@ -1699,6 +1709,11 @@ def calculate_short_circuit(payload: ShortCircuitInput):
     fault_bus_idx = bus_map[payload.fault_bus_id]
     current_type_config = standard_cfg['current_types']
     selected_current_cfg = current_type_config[payload.current_type]
+    fault_bus_voltage_kv = float(net.bus.loc[fault_bus_idx, 'vn_kv'])
+    voltage_factor = get_iec_max_voltage_factor(fault_bus_voltage_kv)
+    current_scale = 1.0
+    if standard_cfg.get('voltage_factor_mode') == 'nominal_from_iec_max':
+        current_scale = 1.0 / voltage_factor
 
     try:
         sc.calc_sc(net, case='max', bus=fault_bus_idx, fault=fault_code, branch_results=True, ip=True, ith=True)
@@ -1710,6 +1725,14 @@ def calculate_short_circuit(payload: ShortCircuitInput):
 
     bus_result = net.res_bus_sc.loc[fault_bus_idx]
     index_to_bus_id = {index: bus_id for bus_id, index in bus_map.items()}
+
+    def scale_current(current: float | None) -> float | None:
+        if current is None:
+            return None
+        scaled = float(current) * current_scale
+        if not math.isfinite(scaled):
+            return None
+        return scaled
 
     def read_float(row, candidates):
         for column in candidates:
@@ -1772,9 +1795,9 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             from_bus_idx = int(net.line.loc[line_index, 'from_bus'])
             to_bus_idx = int(net.line.loc[line_index, 'to_bus'])
 
-            current_from = read_float(row, selected_current_cfg['from_candidates'])
-            current_to = read_float(row, selected_current_cfg['to_candidates'])
-            current_mid = read_float(row, selected_current_cfg['mid_candidates'])
+            current_from = scale_current(read_float(row, selected_current_cfg['from_candidates']))
+            current_to = scale_current(read_float(row, selected_current_cfg['to_candidates']))
+            current_mid = scale_current(read_float(row, selected_current_cfg['mid_candidates']))
             branches[line_name] = make_branch_result(
                 index_to_bus_id.get(from_bus_idx, ''),
                 index_to_bus_id.get(to_bus_idx, ''),
@@ -1790,9 +1813,9 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             hv_bus_idx = int(net.trafo.loc[trafo_index, 'hv_bus'])
             lv_bus_idx = int(net.trafo.loc[trafo_index, 'lv_bus'])
 
-            current_from = read_float(row, selected_current_cfg['trafo_from_candidates'])
-            current_to = read_float(row, selected_current_cfg['trafo_to_candidates'])
-            current_mid = read_float(row, selected_current_cfg['trafo_mid_candidates'])
+            current_from = scale_current(read_float(row, selected_current_cfg['trafo_from_candidates']))
+            current_to = scale_current(read_float(row, selected_current_cfg['trafo_to_candidates']))
+            current_mid = scale_current(read_float(row, selected_current_cfg['trafo_mid_candidates']))
             branches[result_key] = make_branch_result(
                 index_to_bus_id.get(hv_bus_idx, ''),
                 index_to_bus_id.get(lv_bus_idx, ''),
@@ -1801,7 +1824,7 @@ def calculate_short_circuit(payload: ShortCircuitInput):
                 current_mid
             )
 
-    fault_bus_current = read_float(bus_result, selected_current_cfg['bus_candidates'])
+    fault_bus_current = scale_current(read_float(bus_result, selected_current_cfg['bus_candidates']))
     if fault_bus_current is None:
         raise HTTPException(
             status_code=400,
@@ -1843,6 +1866,9 @@ def calculate_short_circuit(payload: ShortCircuitInput):
             'current_type_label': selected_current_cfg['label'],
             'current_result_key': selected_current_cfg['result_key'],
             'engine_note': standard_cfg['engine_note'],
+            'voltage_factor_mode': standard_cfg.get('voltage_factor_mode'),
+            'applied_voltage_factor': round(voltage_factor, 5),
+            'current_scale': round(current_scale, 5),
             'limitations': standard_cfg['limitations']
         },
         'fault_bus': {

@@ -46,6 +46,18 @@ class RepresentativeStudyVerificationTests(unittest.TestCase):
         self.assertEqual(result['branches']['line-1']['result_key'], 'ith_ka')
         self.assertIsNotNone(result['branches']['line-1']['ith_ka'])
 
+    def test_ansi_and_iec_short_circuit_sample_networks_report_different_duties(self):
+        ansi_result = calculate_short_circuit(make_short_circuit_input())
+        iec_result = calculate_short_circuit(make_short_circuit_input(standard='iec_60909'))
+
+        self.assertLess(ansi_result['fault_bus']['current_ka'], iec_result['fault_bus']['current_ka'])
+        self.assertLess(
+            ansi_result['branches']['line-1']['contribution_ka'],
+            iec_result['branches']['line-1']['contribution_ka']
+        )
+        self.assertEqual(ansi_result['fault']['voltage_factor_mode'], 'nominal_from_iec_max')
+        self.assertEqual(iec_result['fault']['voltage_factor_mode'], 'iec_max')
+
     def test_protection_coordination_sample_network(self):
         result = calculate_protection_coordination(make_protection_study_input())
 

@@ -138,6 +138,10 @@ Rules:
   aliases the frontend already renders and add method-aware `result_key` /
   `result_label` metadata or standard-specific fields alongside them rather
   than overloading `ikss_*` names.
+- ANSI short-circuit mode currently rides on the pandapower IEC 60909 engine;
+  if you change that path, keep the backend limitation messaging and
+  `voltage_factor_mode` / `current_scale` metadata aligned so ANSI results do
+  not silently look identical to IEC max-case duties.
 - Advanced studies should not rely on the fallback auto-slack source created for generic load flow; short-circuit and protection coordination now require an explicitly connected generator or utility source and should fail clearly when the study bus is not source-reachable.
 
 Transformer, generator, and short-circuit changes usually require coordinated
