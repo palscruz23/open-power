@@ -325,7 +325,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 20,
-      "implemented": false,
+      "implemented": true,
       "accepted": false,
       "notes": "Focus on canvas readability for branch contribution and fault-current overlays."
     },

@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
+- Short-circuit edge contribution labels should be laid out from the connected bus outward and stacked by a stable per-bus edge-angle order in `frontend/src/pages/LoadFlowStudyPage.jsx` so repeated runs do not overlap the bus-side fault metrics.
 - Protection-ready palette shortcuts should serialize as an existing asset node type plus prefilled `data.protection` defaults so the fixed node taxonomy and backend `asset_type` validation stay aligned.
 - Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
 - Arc-flash regression coverage should keep focused request-model edge cases in `backend/test_arc_flash.py` and mirror one successful sample plus one invalid-assumption case in `backend/test_study_verification.py` so the shared study suite exercises the maintained fixtures too.
@@ -261,4 +262,13 @@
   - Protection palette shortcuts should create supported asset nodes with `data.protection` defaults instead of inventing new node types; that keeps the palette, editor, payload mapping, and backend `asset_type` validation aligned.
   - Shared protection defaults and option lists are now centralized in `frontend/src/utils/protectionDefaults.js`; extend that file first when changing protection palette presets or editor defaults.
   - Checks run this iteration: `cmd /c npm run build` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `git diff --check` passed; parser-level JSX/module validation across edited frontend files via local `@babel/parser` passed; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-13 23:25:09 +10:30 - US-020
+- Reworked short-circuit branch contribution labels to anchor from the connected bus outward and stack them in deterministic per-bus lanes so they stop colliding with bus-side fault-current annotations.
+- Added edge-label background reset coverage in persistence sanitization so repeated short-circuit runs still clear and redraw cleanly.
+- Files changed: `frontend/src/pages/LoadFlowStudyPage.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Short-circuit edge-label placement is easiest to keep stable by sorting connected edges by angle around each bus, then using that order as the lane index for label offsets.
+  - If you add more edge-level study overlays, clear any label background props through `sanitizeEdgeForPersistence()` alongside `label` and `labelStyle` so saved diagrams stay transient-only.
+  - Checks run this iteration: `cmd /c npm run build` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node` JSX parse validation for `frontend/src/pages/LoadFlowStudyPage.jsx` passed via local `@babel/parser`; `git diff --check` passed; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
 ---

@@ -93,6 +93,7 @@ When changing node data or study behavior, keep related frontend pieces in sync:
 - Protection coordination responses now return validated device summaries plus a top-level `curves` array; keep future protection analysis and charting work aligned to that response shape instead of inventing a parallel payload.
 - Protection coordination analysis feedback now lives under the shared response `analysis` object (`warning_count`, `warnings`, `scope_notes`); extend that block for future coordination checks instead of adding a second warnings payload in the frontend.
 - Advanced-study validation now assumes short-circuit and protection coordination need an explicitly connected generator or utility source; keep frontend preflight checks in `LoadFlowStudyPage.jsx` aligned with backend source-reachability validation so users get the same actionable message before and after API requests.
+- Short-circuit edge contribution labels should stay transient on edges and use deterministic bus-anchored offsets in `LoadFlowStudyPage.jsx`; if you add more fault overlays, keep the label-lane ordering stable per connected bus so repeated runs redraw without overlapping the bus-side fault metrics.
 
 When changing backend network models or result payloads, update the frontend
 call sites and renderers in the same task.
