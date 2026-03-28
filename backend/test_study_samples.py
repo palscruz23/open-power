@@ -62,6 +62,46 @@ def make_short_circuit_input(**overrides):
     return make_short_circuit_payload(**overrides)
 
 
+def make_transformer_short_circuit_payload(**overrides):
+    base = {
+        'buses': [
+            {'id': 'bus-1', 'name': 'Transformer HV', 'vn_kv': 33.0},
+            {'id': 'bus-2', 'name': 'Transformer LV', 'vn_kv': 11.0},
+        ],
+        'lines': [],
+        'loads': [
+            {'id': 'load-1', 'bus': 'bus-2', 'p_mw': 1.0, 'q_mvar': 0.2, 'load_type': 'static'}
+        ],
+        'generators': [
+            {'id': 'source-1', 'bus': 'bus-1', 'p_mw': 0.0, 'vm_pu': 1.0}
+        ],
+        'transformers': [
+            {
+                'id': 'tx-1',
+                'hv_bus': 'bus-1',
+                'lv_bus': 'bus-2',
+                'sn_mva': 10.0,
+                'vn_hv_kv': 33.0,
+                'vn_lv_kv': 11.0,
+                'vk_percent': 6.0,
+                'vkr_percent': 0.6,
+                'vector_group': 'Dyn11',
+                'shift_degree': 0.0,
+            }
+        ],
+        'protection_devices': [],
+        'standard': 'ansi',
+        'fault_bus_id': 'bus-2',
+        'fault_type': 'three_phase',
+        'current_type': 'initial_symmetrical',
+    }
+    return ShortCircuitInput(**_deep_update(base, overrides))
+
+
+def make_transformer_short_circuit_input(**overrides):
+    return make_transformer_short_circuit_payload(**overrides)
+
+
 def make_protection_payload(**overrides):
     base = {
         'coordination_margin_s': 0.3,

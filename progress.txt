@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep this section updated with reusable patterns discovered during implementation.
+- Transformer short-circuit branch payloads should carry explicit `primary_*` / `secondary_*` side-current fields in addition to the generic branch aliases so the frontend can show winding-side duties without collapsing them into one contribution value.
 - Short-circuit edge contribution labels should be laid out from the connected bus outward and stacked by a stable per-bus edge-angle order in `frontend/src/pages/LoadFlowStudyPage.jsx` so repeated runs do not overlap the bus-side fault metrics.
 - Protection-ready palette shortcuts should serialize as an existing asset node type plus prefilled `data.protection` defaults so the fixed node taxonomy and backend `asset_type` validation stay aligned.
 - Backend study verification should reuse the shared representative payload builders in `backend/test_study_samples.py` so load-flow, ANSI, IEC 60909, and protection tests stay aligned on the same sample-network assumptions.
@@ -271,4 +272,14 @@
   - Short-circuit edge-label placement is easiest to keep stable by sorting connected edges by angle around each bus, then using that order as the lane index for label offsets.
   - If you add more edge-level study overlays, clear any label background props through `sanitizeEdgeForPersistence()` alongside `label` and `labelStyle` so saved diagrams stay transient-only.
   - Checks run this iteration: `cmd /c npm run build` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; `node` JSX parse validation for `frontend/src/pages/LoadFlowStudyPage.jsx` passed via local `@babel/parser`; `git diff --check` passed; browser verification via dev-browser skill was unavailable because that skill is not present in this session.
+---
+## 2026-03-13 23:32:34 +10:30 - US-021
+- Corrected transformer short-circuit result shaping so transformer branches now expose explicit primary-side and secondary-side currents, preserving the winding-ratio difference instead of collapsing the display to one generic contribution value.
+- Updated the short-circuit results panel to label transformer branches as primary/secondary and show both side currents in one row.
+- Added shared transformer short-circuit sample coverage and backend regression assertions for distinct HV/LV transformer duties.
+- Files changed: `backend/main.py`, `backend/test_short_circuit.py`, `backend/test_study_samples.py`, `backend/test_study_verification.py`, `frontend/src/components/ControlPanel.jsx`, `AGENTS.md`, `prd.json`, `progress.txt`
+- **Learnings for future iterations:**
+  - Pandapower transformer short-circuit branch results come back as side-specific `*_hv_ka` / `*_lv_ka` columns, so result shaping should keep those side values explicit instead of forcing them through the generic branch `current_ka` slot.
+  - The short-circuit results panel in `frontend/src/components/ControlPanel.jsx` needs a transformer-specific branch rendering path; otherwise it falls back to one preferred branch value and hides distinct winding-side duties.
+  - Checks run this iteration: `.venv\\Scripts\\python.exe -m unittest backend.test_load_flow backend.test_short_circuit backend.test_study_verification` passed; `cmd /c npm run build` failed in this sandbox with `Error: spawn EPERM` while Vite/esbuild loaded config; parser-level JSX validation for `frontend/src/components/ControlPanel.jsx` passed via local `@babel/parser`; `git diff --check` passed.
 ---

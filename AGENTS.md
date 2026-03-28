@@ -140,6 +140,7 @@ Rules:
   aliases the frontend already renders and add method-aware `result_key` /
   `result_label` metadata or standard-specific fields alongside them rather
   than overloading `ikss_*` names.
+- Transformer short-circuit branch results should expose explicit `primary_*` / `secondary_*` side-current fields alongside the generic branch aliases so the frontend can render winding-side duties without collapsing them into one contribution value.
 - ANSI short-circuit mode currently rides on the pandapower IEC 60909 engine;
   if you change that path, keep the backend limitation messaging and
   `voltage_factor_mode` / `current_scale` metadata aligned so ANSI results do
